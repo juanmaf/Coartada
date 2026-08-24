@@ -271,6 +271,7 @@
       <button class="tab-btn" role="tab" data-view="ranking">Ranking</button>
       <button class="tab-btn" role="tab" data-view="rondas">Rondas</button>
       <button class="tab-btn" role="tab" data-view="evolucion">Evolución</button>
+      <button class="tab-btn" role="tab" data-view="nivel">Nivel</button>
       <button class="tab-btn" role="tab" data-view="equipos">Equipos</button>
       <button class="tab-btn" role="tab" data-view="campos">Campos</button>
       <button class="tab-btn" role="tab" data-view="admin">Admin</button>
@@ -455,6 +456,48 @@
       </div>
     </section>
 
+    <!-- NIVEL -->
+    <section class="view" id="view-nivel">
+      <div class="stack">
+        <div class="row">
+          <div class="card" style="flex:0 0 220px;">
+            <h2 style="font-size:16px;margin-bottom:8px;">¿Quién?</h2>
+            <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px;">Tus rondas, agrupadas por el nivel al que jugaste cada una.</p>
+            <div class="checklist" id="nivelPlayerList"></div>
+          </div>
+          <div class="card" style="flex:1 1 480px;">
+            <div class="section-head"><div><h2>Rondas por nivel jugado</h2><p>Agrupadas por diferencial — el valor que mide lo bien o mal que jugaste esa vuelta en concreto, comparable entre campos distintos.</p></div></div>
+            <div class="row" id="nivelRangeControls" style="gap:10px;align-items:flex-end;margin-bottom:12px;">
+              <div class="row" style="gap:6px;">
+                <button type="button" class="btn small" data-nivel-range="all">Todo</button>
+                <button type="button" class="btn small" data-nivel-range="1m">Último mes</button>
+                <button type="button" class="btn small" data-nivel-range="3m">Último trimestre</button>
+                <button type="button" class="btn small" data-nivel-range="1y">Último año</button>
+              </div>
+              <div class="field" style="margin:0;flex:0 0 150px;"><label for="nivelFrom">Desde</label><input type="date" id="nivelFrom"></div>
+              <div class="field" style="margin:0;flex:0 0 150px;"><label for="nivelTo">Hasta</label><input type="date" id="nivelTo"></div>
+            </div>
+            <div class="row" id="nivelBandControls" style="gap:10px;align-items:flex-end;margin-bottom:14px;">
+              <div class="field" style="margin:0;flex:0 0 170px;">
+                <label for="nivelBandWidth">Ancho de tramo</label>
+                <select id="nivelBandWidth">
+                  <option value="2">2 golpes</option>
+                  <option value="4" selected>4 golpes</option>
+                  <option value="6">6 golpes</option>
+                  <option value="8">8 golpes</option>
+                </select>
+              </div>
+              <div class="field" style="margin:0;flex:1 1 220px;">
+                <label for="nivelCustomEdges">Tramos personalizados (opcional)</label>
+                <input type="text" id="nivelCustomEdges" placeholder="Ej. 0,5,10,15,25">
+              </div>
+            </div>
+            <div id="nivelBands"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- EQUIPOS -->
     <section class="view" id="view-equipos">
       <div class="stack">
@@ -466,8 +509,8 @@
               <button class="btn gold" type="submit">Crear equipo</button>
             </form>
             <p id="teamAssignNote" style="font-size:12px;color:var(--muted);margin:0 0 10px;"></p>
-            <div class="table-wrap"><table class="data" id="teamAssignTable">
-              <thead><tr><th>Jugador</th><th>Equipo</th></tr></thead>
+            <div class="table-wrap" id="teamAssignTableWrap"><table class="data" id="teamAssignTable">
+              <thead><tr><th>Jugador</th><th>Equipo</th><th></th></tr></thead>
               <tbody></tbody>
             </table></div>
           </div>
@@ -679,6 +722,7 @@
   // ---------- Operaciones de escritura (sustituyen a las mutaciones directas del DOM) ----------
   var StoreOps = {
     setPlayer: function(id, data){ return setDoc(doc(db,'players', id), data, { merge: true }); },
+    deletePlayer: function(id){ return deleteDoc(doc(db,'players', id)); },
     addTee: function(data){ return addDoc(collection(db,'tees'), data); },
     addRound: function(data){ return addDoc(collection(db,'rounds'), data); },
     updateRound: function(id, patch){ return updateDoc(doc(db,'rounds', id), patch); },
@@ -1009,6 +1053,18 @@
     e.preventDefault();
     var name = $('#onboardNewName').value.trim();
     if(!name) return;
+    // Red de seguridad contra duplicados: si el nombre ya existe (sin importar mayúsculas
+    // o acentos), no se crea un jugador nuevo — se identifica este dispositivo con el que
+    // ya había. Esto es lo que debería haber pasado si se elige de la lista de arriba; este
+    // formulario es solo para la primera vez de verdad que alguien entra al grupo.
+    var existing = players().find(function(p){ return normName(p.name) === normName(name); });
+    if(existing){
+      setMyId(existing.id);
+      $('#onboardNewName').value = '';
+      $('#onboardModal').hidden = true;
+      renderWhoAmI(); render();
+      return;
+    }
     var id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
     StoreOps.setPlayer(id, { name: name, team: '' }).then(function(){
       setMyId(id);
@@ -1019,7 +1075,7 @@
   });
 
   // ---------- tabs ----------
-  var VIEWS = ["ranking","rondas","evolucion","equipos","campos","admin"];
+  var VIEWS = ["ranking","rondas","evolucion","nivel","equipos","campos","admin"];
   function showView(name){
     VIEWS.forEach(function(v){
       $('#view-'+v).classList.toggle('active', v===name);
@@ -1083,9 +1139,9 @@
     thead.innerHTML = asOf
       ? ('<tr><th>#</th><th>Jugador</th><th>Equipo</th>'+
          '<th class="num">HCP a '+esc(fmtDateShort(asOf,false))+'</th>'+
-         '<th class="num">HCP hoy (referencia)</th>'+
+         '<th class="num">HCP hoy</th>'+
          '<th class="num">Diferencia</th>'+
-         '<th class="num">Rondas totales</th>'+
+         '<th class="num">Rondas anteriores</th>'+
          '<th class="num">Rondas periodo</th>'+extremesHead+'</tr>')
       : ('<tr><th>#</th><th>Jugador</th><th>Equipo</th><th class="num">HCP</th><th class="num">Rondas</th>'+extremesHead+'</tr>');
 
@@ -1555,6 +1611,140 @@
     });
   }
 
+  // ---------- Nivel view (rondas propias agrupadas por nivel jugado) ----------
+  // Un jugador elige (normalmente él mismo) y ve sus rondas aprobadas agrupadas en tramos de
+  // diferencial — la única medida comparable entre campos distintos — para un periodo dado.
+  // Por defecto los tramos son automáticos, de `nivelBandWidth` golpes, empezando en 0 y
+  // creciendo hasta cubrir su diferencial más alto en ese periodo; también se pueden fijar
+  // tramos concretos a mano (lista de límites separados por comas).
+  var nivelPlayerId = null;
+  var nivelRange = { mode: 'all', from: null, to: null };
+  var nivelExpanded = {};
+
+  function renderNivelPlayerList(){
+    var ps = players();
+    var box = $('#nivelPlayerList');
+    if(ps.length===0){ box.innerHTML = ''; return; }
+    if(nivelPlayerId==null || !ps.some(function(p){return p.id===nivelPlayerId;})){
+      nivelPlayerId = (myId() && ps.some(function(p){return p.id===myId();})) ? myId() : ps[0].id;
+    }
+    box.innerHTML = ps.map(function(p,i){
+      var checked = p.id===nivelPlayerId ? 'checked' : '';
+      return '<label><input type="radio" name="nivelPlayer" data-nivel-player="'+esc(p.id)+'" '+checked+'> <span style="width:9px;height:9px;border-radius:3px;background:'+catColor(i)+';display:inline-block;"></span> '+esc(p.name)+'</label>';
+    }).join('');
+    $all('[data-nivel-player]', box).forEach(function(rb){
+      rb.addEventListener('change', function(){
+        if(!rb.checked) return;
+        nivelPlayerId = rb.getAttribute('data-nivel-player');
+        nivelExpanded = {};
+        renderNivelBands();
+      });
+    });
+  }
+
+  function applyNivelRangePreset(mode){
+    nivelRange.mode = mode;
+    var today = todayIso();
+    if(mode === 'all'){ nivelRange.from = null; nivelRange.to = null; }
+    else if(mode === '1m'){ nivelRange.from = isoDateNDaysAgo(30); nivelRange.to = today; }
+    else if(mode === '3m'){ nivelRange.from = isoDateNDaysAgo(91); nivelRange.to = today; }
+    else if(mode === '1y'){ nivelRange.from = isoDateNDaysAgo(365); nivelRange.to = today; }
+    $('#nivelFrom').value = nivelRange.from || '';
+    $('#nivelTo').value = nivelRange.to || '';
+    nivelExpanded = {};
+    renderNivelBands();
+  }
+  $all('[data-nivel-range]').forEach(function(btn){
+    btn.addEventListener('click', function(){ applyNivelRangePreset(btn.getAttribute('data-nivel-range')); });
+  });
+  $('#nivelFrom').addEventListener('change', function(){
+    nivelRange.mode = 'custom'; nivelRange.from = $('#nivelFrom').value || null; nivelExpanded = {}; renderNivelBands();
+  });
+  $('#nivelTo').addEventListener('change', function(){
+    nivelRange.mode = 'custom'; nivelRange.to = $('#nivelTo').value || null; nivelExpanded = {}; renderNivelBands();
+  });
+  $('#nivelBandWidth').addEventListener('change', function(){ nivelExpanded = {}; renderNivelBands(); });
+  $('#nivelCustomEdges').addEventListener('input', function(){ nivelExpanded = {}; renderNivelBands(); });
+
+  function nivelRoundsInRange(playerId, range){
+    var rs = approvedRoundsFor(playerId);
+    if(range.from) rs = rs.filter(function(r){ return r.date >= range.from; });
+    if(range.to) rs = rs.filter(function(r){ return r.date <= range.to; });
+    return rs;
+  }
+
+  // Límites de los tramos: los personalizados si el usuario escribió algo válido (al menos
+  // dos números, ordenados, sin duplicados), o si no, un rango automático de `width` golpes
+  // que arranca en 0 y llega hasta cubrir el diferencial más alto del periodo.
+  function nivelBandEdges(rs, width){
+    var customRaw = $('#nivelCustomEdges').value.trim();
+    if(customRaw){
+      var edges = customRaw.split(',').map(function(s){ return parseFloat(s.trim()); })
+        .filter(function(n){ return !isNaN(n); })
+        .sort(function(a,b){ return a-b; });
+      edges = edges.filter(function(v,i){ return i===0 || v!==edges[i-1]; });
+      if(edges.length>=2) return edges;
+    }
+    var maxDiff = rs.length ? Math.max.apply(null, rs.map(function(r){ return r.differential; })) : 0;
+    var top = Math.max(width, Math.ceil(maxDiff/width)*width);
+    var out = [];
+    for(var v=0; v<=top; v+=width) out.push(v);
+    return out;
+  }
+
+  function renderNivelBands(){
+    var container = $('#nivelBands');
+    var player = players().find(function(p){ return p.id===nivelPlayerId; });
+    if(!player){ container.innerHTML = '<p class="empty">No hay jugadores todavía.</p>'; return; }
+    var width = parseInt($('#nivelBandWidth').value, 10) || 4;
+    var rs = nivelRoundsInRange(nivelPlayerId, nivelRange);
+    if(rs.length===0){
+      container.innerHTML = '<p class="empty">'+esc(player.name)+' no tiene rondas aprobadas en este periodo.</p>';
+      return;
+    }
+    var edges = nivelBandEdges(rs, width);
+    var bands = [];
+    var negRounds = rs.filter(function(r){ return r.differential < edges[0]; });
+    if(negRounds.length){ bands.push({ label:'< '+edges[0], rounds: negRounds }); }
+    for(var i=0;i<edges.length-1;i++){
+      var lo = edges[i], hi = edges[i+1];
+      var isLast = (i === edges.length-2);
+      var inBand = rs.filter(function(r){ return r.differential>=lo && (isLast ? r.differential<=hi : r.differential<hi); });
+      bands.push({ label: lo+'–'+hi, rounds: inBand });
+    }
+    var total = rs.length;
+    var maxCount = Math.max.apply(null, bands.map(function(b){ return b.rounds.length; }).concat([1]));
+    container.innerHTML = bands.map(function(b, idx){
+      var pct = total ? Math.round(b.rounds.length/total*100) : 0;
+      var barPct = Math.round(b.rounds.length/maxCount*100);
+      var expanded = !!nivelExpanded[idx];
+      var listHtml = '';
+      if(expanded && b.rounds.length){
+        var sorted = b.rounds.slice().sort(cmpDateDesc);
+        listHtml = '<div class="table-wrap" style="margin-top:8px;"><table class="data"><thead><tr><th>Fecha</th><th>Campo</th><th class="num">Diferencial</th></tr></thead><tbody>' +
+          sorted.map(function(r){
+            return '<tr><td>'+esc(fmtDateShort(r.date,false))+'</td><td>'+esc(r.course)+'</td><td class="num">'+r.differential.toFixed(1)+'</td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }
+      return '<div class="nivel-band" data-nivel-band="'+idx+'" style="margin-bottom:10px;'+(b.rounds.length?'cursor:pointer;':'opacity:.5;')+'">' +
+        '<div class="row" style="justify-content:space-between;gap:8px;">' +
+          '<span>'+esc(b.label)+'</span>' +
+          '<span style="color:var(--muted);font-size:13px;">'+b.rounds.length+' rondas'+(total?(' · '+pct+'%'):'')+'</span>' +
+        '</div>' +
+        '<div style="height:10px;border-radius:5px;background:var(--fairway-wash);overflow:hidden;margin-top:4px;">' +
+          '<div style="height:100%;width:'+barPct+'%;background:var(--fairway);"></div>' +
+        '</div>' + listHtml +
+      '</div>';
+    }).join('');
+    $all('[data-nivel-band]', container).forEach(function(el, idx){
+      el.addEventListener('click', function(e){
+        if(e.target.closest('table')) return;
+        nivelExpanded[idx] = !nivelExpanded[idx];
+        renderNivelBands();
+      });
+    });
+  }
+
   // ---------- Filtro de intervalo de fechas (Equipos) — mismo patrón que Evolución de jugadores ----------
   var teamEvoRange = { mode: 'all', from: null, to: null };
   function applyTeamEvoRangePreset(mode){
@@ -1815,27 +2005,46 @@
     var ps = players(), tms = teams();
     var tbody = $('#teamAssignTable tbody');
     var note = $('#teamAssignNote');
-    note.textContent = adminUnlocked
-      ? 'Estás como admin: puedes reasignar a cualquiera.'
-      : 'Solo el admin puede cambiar la columna Equipo. Entra con el PIN en la pestaña Admin si te toca a ti.';
-    if(ps.length===0){ tbody.innerHTML = '<tr><td colspan="2" class="empty">Todavía no hay jugadores.</td></tr>'; return; }
+    // El listado de "quién está en qué equipo" es solo para el admin — no solo cambiarlo,
+    // también verlo. Un jugador normal solo debe ver los datos agregados (la comparativa de
+    // equipos, más abajo), no el listado nombre a nombre.
+    $('#teamAssignTableWrap').hidden = !adminUnlocked;
     if(!adminUnlocked){
-      tbody.innerHTML = ps.map(function(p){
-        var t = tms.find(function(x){return x.id===p.team;});
-        return '<tr><td>'+esc(p.name)+'</td><td>'+(t?esc(t.name):'<span class="empty" style="padding:0;">Sin equipo</span>')+'</td></tr>';
-      }).join('');
+      note.textContent = 'El listado de jugadores por equipo solo lo puede ver el admin. Entra con el PIN en la pestaña Admin si te toca a ti.';
       return;
     }
+    note.textContent = 'Estás como admin: puedes reasignar a cualquiera. Los jugadores sin ninguna ronda registrada se pueden borrar (por ejemplo, duplicados creados por error al identificarse).';
+    if(ps.length===0){ tbody.innerHTML = '<tr><td colspan="3" class="empty">Todavía no hay jugadores.</td></tr>'; return; }
+    var allRounds = rounds();
     tbody.innerHTML = ps.map(function(p){
       var opts = '<option value="">Sin equipo</option>' + tms.map(function(t){
         return '<option value="'+esc(t.id)+'" '+(p.team===t.id?'selected':'')+'>'+esc(t.name)+'</option>';
       }).join('');
-      return '<tr><td>'+esc(p.name)+'</td><td><select data-assign="'+esc(p.id)+'">'+opts+'</select></td></tr>';
+      var hasRounds = allRounds.some(function(r){ return r.player===p.id; });
+      var delCell = hasRounds ? '' : '<button class="btn small danger" data-del-player="'+esc(p.id)+'">Borrar</button>';
+      return '<tr><td>'+esc(p.name)+'</td><td><select data-assign="'+esc(p.id)+'">'+opts+'</select></td><td>'+delCell+'</td></tr>';
     }).join('');
     $all('[data-assign]', tbody).forEach(function(sel){
       sel.addEventListener('change', function(){
         var pid = sel.getAttribute('data-assign');
         StoreOps.setPlayer(pid, { team: sel.value }).then(render);
+      });
+    });
+    // Borrar jugador: solo posible si no tiene ninguna ronda (así no se puede perder
+    // histórico por error); confirmación en dos clics, igual que al borrar una ronda.
+    $all('[data-del-player]', tbody).forEach(function(btn){
+      var confirming = false, resetTimer = null;
+      btn.addEventListener('click', function(){
+        if(!confirming){
+          confirming = true;
+          btn.textContent = '¿Seguro?';
+          resetTimer = setTimeout(function(){ confirming = false; btn.textContent = 'Borrar'; }, 4000);
+          return;
+        }
+        clearTimeout(resetTimer);
+        btn.disabled = true;
+        var pid = btn.getAttribute('data-del-player');
+        StoreOps.deletePlayer(pid).then(render);
       });
     });
   }
@@ -2151,14 +2360,31 @@
     renderRoundsFeed();
     renderEvoList();
     renderEvoChart();
+    renderNivelPlayerList();
+    renderNivelBands();
     renderTeamAssign();
     renderTeamEvoList();
     renderTeamEvoChart();
     renderCoursesTable();
     renderAdmin();
     renderImportAsSelector();
+    maybeAutoOnboard();
   }
   onStoreChange = render;
+
+  // Al abrir la app, Firestore todavía no ha devuelto los jugadores en el primer instante
+  // (llega por red, de forma asíncrona) — si se comprobara "¿ya soy alguien?" justo al
+  // cargar la página, players() estaría todavía vacío y el modal de "¿Quién eres?" mostraría
+  // "Todavía no hay nadie. Sé el primero." aunque el jugador ya exista, lo que llevaba a
+  // crear un jugador duplicado con el mismo nombre en cada dispositivo/navegador nuevo. Por
+  // eso esta comprobación espera a que TODAS las colecciones hayan cargado (allReady()) y
+  // solo se hace una vez por carga de página (onboardAutoChecked).
+  var onboardAutoChecked = false;
+  function maybeAutoOnboard(){
+    if(onboardAutoChecked || !allReady()) return;
+    onboardAutoChecked = true;
+    if(!myId() || !players().some(function(p){return p.id===myId();})){ openOnboard(); }
+  }
 
   document.addEventListener('DOMContentLoaded', function(){
     var savedTab = 'ranking';
@@ -2166,7 +2392,6 @@
     showView(savedTab);
     if(!$('#rf-date').value){ $('#rf-date').value = new Date().toISOString().slice(0,10); }
     render();
-    if(!myId() || !players().some(function(p){return p.id===myId();})){ openOnboard(); }
   });
 </script>
 </body>
