@@ -1035,8 +1035,13 @@
     if(ps.length===0){
       list.innerHTML = '<p class="empty">Todavía no hay nadie. Sé el primero.</p>';
     } else {
+      // Se muestra el número de rondas de cada uno junto al nombre — sobre todo útil si hay
+      // nombres repetidos (p.ej. duplicados creados por error antes de identificar bien este
+      // dispositivo): así se distingue a simple vista cuál es la cuenta "real" con historial.
+      var allRounds = rounds();
       list.innerHTML = ps.map(function(p){
-        return '<button type="button" data-pick="'+esc(p.id)+'">'+esc(p.name)+'</button>';
+        var n = allRounds.filter(function(r){ return r.player===p.id; }).length;
+        return '<button type="button" data-pick="'+esc(p.id)+'">'+esc(p.name)+' <span style="opacity:.6;font-size:12px;">('+n+' '+(n===1?'ronda':'rondas')+')</span></button>';
       }).join('');
     }
     modal.hidden = false;
