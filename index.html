@@ -1,0 +1,2173 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Liga de Hándicap</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  :root{
+    color-scheme: light;
+    --bg: #f3f5f0;
+    --plane: #ffffff;
+    --ink: #16241c;
+    --ink-2: #4b5a4f;
+    --muted: #83907f;
+    --line: #dde2d6;
+    --line-strong: #c3cbb9;
+    --accent: #b9862a;      /* brass / trofeo */
+    --accent-ink: #5c3d0f;
+    --accent-wash: #f4e6c9;
+    --fairway: #1f5c43;     /* verde campo, estructural */
+    --fairway-wash: #e4efe8;
+    --good: #0ca30c;
+    --warning: #a66a00;      /* texto legible sobre warning wash */
+    --warning-bg: #fdecc8;
+    --critical: #d03b3b;
+    --critical-bg: #fbe3e3;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#c98500;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+    --focus: #1f5c43;
+    --shadow: 0 1px 2px rgba(22,36,28,.06), 0 6px 20px rgba(22,36,28,.07);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --bg: #12140f;
+      --plane: #1a1e16;
+      --ink: #eef1e9;
+      --ink-2: #c3cbb9;
+      --muted: #8a9385;
+      --line: #2b3126;
+      --line-strong: #3a4232;
+      --accent: #d7a24a;
+      --accent-ink: #2b1c06;
+      --accent-wash: #33290f;
+      --fairway: #6fbe98;
+      --fairway-wash: #18261e;
+      --good: #3fca3f;
+      --warning: #e0ac3f;
+      --warning-bg: #3a2c0c;
+      --critical: #e97a7a;
+      --critical-bg: #3a1414;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#3fca3f; --s7:#9085e9; --s8:#e66767;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --bg: #12140f;
+    --plane: #1a1e16;
+    --ink: #eef1e9;
+    --ink-2: #c3cbb9;
+    --muted: #8a9385;
+    --line: #2b3126;
+    --line-strong: #3a4232;
+    --accent: #d7a24a;
+    --accent-ink: #2b1c06;
+    --accent-wash: #33290f;
+    --fairway: #6fbe98;
+    --fairway-wash: #18261e;
+    --good: #3fca3f;
+    --warning: #e0ac3f;
+    --warning-bg: #3a2c0c;
+    --critical: #e97a7a;
+    --critical-bg: #3a1414;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#3fca3f; --s7:#9085e9; --s8:#e66767;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family: "Source Sans 3", "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size:15px;
+    line-height:1.45;
+  }
+  h1,h2,h3{ font-family:"Fraunces","Iowan Old Style",Georgia,serif; font-weight:600; text-wrap:balance; margin:0; }
+  .num{ font-family:"IBM Plex Mono","SF Mono",Consolas,monospace; font-variant-numeric: tabular-nums; }
+  button{ font-family:inherit; }
+  a{ color:var(--fairway); }
+
+  [hidden]{ display:none !important; }
+
+  .app-shell{ max-width:1080px; margin:0 auto; padding:0 16px 64px; }
+
+  .topbar{
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:18px 0 14px; border-bottom:1px solid var(--line);
+    margin-bottom:18px;
+  }
+  .brand{ display:flex; align-items:baseline; gap:8px; margin-right:auto; }
+  .brand .mark{ font-size:22px; }
+  .brand h1{ font-size:20px; }
+  .brand small{ color:var(--muted); font-size:12px; letter-spacing:.02em; }
+
+  .tabs{ display:flex; gap:4px; flex-wrap:wrap; }
+  .tab-btn{
+    border:1px solid transparent; background:none; color:var(--ink-2);
+    padding:7px 12px; border-radius:8px; font-size:13.5px; cursor:pointer;
+  }
+  .tab-btn:hover{ background:var(--fairway-wash); color:var(--ink); }
+  .tab-btn[aria-selected="true"]{ background:var(--fairway); color:#fff; }
+  .tab-btn:focus-visible{ outline:2px solid var(--focus); outline-offset:2px; }
+
+  .whoami{ display:flex; align-items:center; gap:8px; }
+  .chip{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--plane); border:1px solid var(--line-strong);
+    padding:5px 10px; border-radius:999px; font-size:13px; box-shadow:var(--shadow);
+  }
+  .chip button{ background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:0; text-decoration:underline;}
+
+  .view{ display:none; }
+  .view.active{ display:block; animation:fade .15s ease; }
+  @media (prefers-reduced-motion: reduce){ .view.active{ animation:none; } }
+  @keyframes fade{ from{opacity:0} to{opacity:1} }
+
+  .card{
+    background:var(--plane); border:1px solid var(--line);
+    border-radius:14px; padding:18px 20px; box-shadow:var(--shadow);
+  }
+  .stack{ display:flex; flex-direction:column; gap:16px; }
+  .row{ display:flex; gap:16px; flex-wrap:wrap; }
+  .row > .card{ flex:1; min-width:240px; }
+
+  .section-head{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap;}
+  .section-head h2{ font-size:19px; }
+  .section-head p{ margin:2px 0 0; color:var(--muted); font-size:13px; }
+
+  table.data{ width:100%; border-collapse:collapse; font-size:14px; }
+  table.data th{ text-align:left; color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em; padding:0 10px 8px; border-bottom:1px solid var(--line); }
+  table.data td{ padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  table.data tr:last-child td{ border-bottom:none; }
+  table.data td.num, table.data th.num{ text-align:right; font-family:"IBM Plex Mono",monospace; font-variant-numeric: tabular-nums; }
+  .table-wrap{ overflow-x:auto; }
+
+  .pill{ display:inline-flex; align-items:center; gap:5px; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:600; letter-spacing:.01em; white-space:nowrap;}
+  .pill.good{ background:color-mix(in srgb, var(--good) 16%, transparent); color:var(--good); }
+  .pill.warning{ background:var(--warning-bg); color:var(--warning); }
+  .pill.muted{ background:var(--line); color:var(--ink-2); }
+  .pill::before{ content:"●"; font-size:8px; }
+
+  label{ display:block; font-size:12.5px; color:var(--ink-2); margin-bottom:4px; font-weight:600; }
+  input[type=text], input[type=number], input[type=date], input[type=password], select, textarea{
+    width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--line-strong);
+    background:var(--plane); color:var(--ink); font-size:14.5px; font-family:inherit;
+  }
+  input:focus-visible, select:focus-visible, button:focus-visible{ outline:2px solid var(--focus); outline-offset:1px; }
+  .field{ margin-bottom:12px; }
+  .field .hint{ font-size:12px; color:var(--muted); margin-top:4px; font-weight:400; }
+  .combo{ position:relative; }
+  .combo-menu{
+    position:absolute; z-index:20; top:calc(100% + 4px); left:0; right:0; max-height:260px;
+    overflow-y:auto; background:var(--plane); border:1px solid var(--line-strong); border-radius:10px;
+    box-shadow:var(--shadow); padding:4px;
+  }
+  .combo-menu button{
+    display:block; width:100%; text-align:left; padding:8px 10px; border:none; background:none;
+    font:inherit; font-size:14px; color:var(--ink); cursor:pointer; border-radius:7px;
+  }
+  .combo-menu button:hover, .combo-menu button.active{ background:var(--fairway-wash); color:var(--fairway); }
+  .combo-menu .empty{ padding:8px 10px; color:var(--muted); font-size:13px; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  @media (max-width:640px){ .grid2,.grid3{ grid-template-columns:1fr; } }
+
+  .btn{
+    display:inline-flex; align-items:center; gap:6px; justify-content:center;
+    padding:9px 16px; border-radius:9px; font-size:14px; font-weight:600;
+    border:1px solid var(--line-strong); background:var(--plane); color:var(--ink); cursor:pointer;
+  }
+  .btn:hover{ background:var(--fairway-wash); }
+  .btn.primary{ background:var(--fairway); border-color:var(--fairway); color:#fff; }
+  .btn.primary:hover{ filter:brightness(1.08); }
+  .btn.gold{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn.danger{ color:var(--critical); border-color:var(--critical); background:transparent; }
+  .btn.danger:hover{ background:var(--critical-bg); }
+  .btn.small{ padding:5px 10px; font-size:12.5px; }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(10,14,10,.5); display:flex; align-items:center; justify-content:center;
+    padding:20px; z-index:50;
+  }
+  .modal{ background:var(--plane); border-radius:16px; padding:24px; max-width:440px; width:100%; box-shadow:var(--shadow); max-height:86vh; overflow:auto;}
+  .modal h2{ font-size:19px; margin-bottom:4px; }
+  .modal p.lead{ color:var(--muted); font-size:13.5px; margin:0 0 16px; }
+
+  .player-pick{ display:flex; flex-direction:column; gap:6px; max-height:220px; overflow:auto; margin-bottom:14px; border:1px solid var(--line); border-radius:10px; padding:6px; }
+  .player-pick button{ text-align:left; background:none; border:none; padding:8px 10px; border-radius:7px; cursor:pointer; color:var(--ink); font-size:14px; }
+  .player-pick button:hover{ background:var(--fairway-wash); }
+
+  .empty{ color:var(--muted); font-size:13.5px; padding:20px 0; text-align:center; }
+
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:12.5px; color:var(--ink-2); }
+  .legend .lk{ display:inline-flex; align-items:center; gap:5px; }
+  .legend .sw{ width:10px; height:10px; border-radius:3px; display:inline-block; }
+
+  .checklist{ display:flex; flex-direction:column; gap:2px; max-height:260px; overflow:auto; border:1px solid var(--line); border-radius:10px; padding:6px; }
+  .checklist label{ display:flex; align-items:center; gap:8px; font-weight:400; font-size:13.5px; padding:6px 8px; border-radius:7px; margin:0; color:var(--ink); }
+  .checklist label:hover{ background:var(--fairway-wash); }
+  .checklist input{ width:auto; }
+
+  .tee-row-form{ display:grid; grid-template-columns:1.4fr .8fr .8fr .6fr auto; gap:8px; align-items:end; margin-bottom:8px; }
+  @media (max-width:640px){ .tee-row-form{ grid-template-columns:1fr 1fr; } }
+
+  .banner{ display:flex; gap:10px; align-items:flex-start; padding:11px 14px; border-radius:10px; font-size:13px; margin-bottom:14px; }
+  .banner.info{ background:var(--fairway-wash); color:var(--ink); }
+  .banner.warn{ background:var(--warning-bg); color:var(--warning); }
+
+  .stat-tile{ display:flex; flex-direction:column; gap:2px; }
+  .stat-tile .label{ font-size:12px; color:var(--muted); }
+  .stat-tile .value{ font-size:28px; font-weight:600; font-family:"Fraunces",serif; }
+
+  .kv{ display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed var(--line); }
+  .kv:last-child{ border-bottom:none; }
+
+  svg.chart text{ font-family: inherit; }
+  .chart-wrap{ position:relative; }
+  .chart-marker{ cursor:default; }
+  /* pan-y: en móvil, arrastrar el dedo horizontalmente sobre el gráfico mueve el cursor de
+     valores en vez de hacer scroll de la página; el scroll vertical normal sigue funcionando. */
+  svg.chart{ touch-action:pan-y; }
+  .hover-line{ stroke:var(--muted); stroke-width:1; stroke-dasharray:3 3; display:none; pointer-events:none; }
+  .hover-dot{ display:none; pointer-events:none; }
+  .tooltip-box{
+    position:absolute; pointer-events:none; display:none; z-index:5;
+    background:var(--plane); border:1px solid var(--line-strong); border-radius:9px;
+    padding:6px 10px; font-size:12px; line-height:1.45; color:var(--ink);
+    box-shadow:var(--shadow); white-space:nowrap;
+  }
+  .tooltip-box strong{ display:block; font-size:12.5px; font-weight:600; }
+  .tooltip-box .tt-val{ font-family:"IBM Plex Mono",monospace; color:var(--accent); font-weight:600; }
+  .tooltip-box .tt-row{ display:flex; align-items:center; gap:6px; margin-top:3px; }
+  .tooltip-box .tt-sw{ width:8px; height:8px; border-radius:2px; display:inline-block; flex:none; }
+  .tooltip-box .tt-row .tt-val{ margin-left:auto; padding-left:10px; }
+
+  .ranking-asof{ display:flex; gap:8px; align-items:center; }
+  .ranking-asof input[type="date"]{ width:auto; }
+
+  footer.note{ color:var(--muted); font-size:12px; text-align:center; margin-top:30px; }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">⛳</span>
+      <div>
+        <h1>Liga de Hándicap</h1>
+        <br><small>hándicap WHS del grupo, hoyo a hoyo no, ronda a ronda sí</small>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist" id="tabs">
+      <button class="tab-btn" role="tab" data-view="ranking">Ranking</button>
+      <button class="tab-btn" role="tab" data-view="rondas">Rondas</button>
+      <button class="tab-btn" role="tab" data-view="evolucion">Evolución</button>
+      <button class="tab-btn" role="tab" data-view="equipos">Equipos</button>
+      <button class="tab-btn" role="tab" data-view="campos">Campos</button>
+      <button class="tab-btn" role="tab" data-view="admin">Admin</button>
+    </nav>
+    <div class="whoami" id="whoamiBox"></div>
+  </header>
+
+  <div id="syncBanner" class="banner warn" hidden></div>
+
+  <!-- ======================= VIEWS ======================= -->
+  <main>
+
+    <!-- RANKING -->
+    <section class="view" id="view-ranking">
+      <div class="stack">
+        <div class="banner info">
+          Ranking informativo por hándicap WHS actual. No decide nada por sí solo — es para presumir o para llorar, según toque.
+        </div>
+        <div class="row">
+          <div class="card" style="flex:0 0 200px;">
+            <div class="stat-tile">
+              <span class="label">Jugadores con hándicap</span>
+              <span class="value num" id="statPlayers">–</span>
+            </div>
+          </div>
+          <div class="card" style="flex:0 0 200px;">
+            <div class="stat-tile">
+              <span class="label">Rondas aprobadas</span>
+              <span class="value num" id="statRounds">–</span>
+            </div>
+          </div>
+          <div class="card" style="flex:0 0 200px;">
+            <div class="stat-tile">
+              <span class="label">Campos en la base</span>
+              <span class="value num" id="statCourses">–</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="section-head">
+            <div>
+              <h2>Clasificación</h2>
+              <p id="rankingSubtitle">Ordenado de mejor (más bajo) a peor hándicap.</p>
+            </div>
+            <div class="row" style="gap:8px;flex-wrap:wrap;">
+              <div class="ranking-asof">
+                <label for="rankingAsOfDate" style="font-size:12px;color:var(--muted);">Ver a fecha</label>
+                <input type="date" id="rankingAsOfDate">
+                <button type="button" class="btn small" id="rankingAsOfYearAgo">Hace 1 año</button>
+                <button type="button" class="btn small" id="rankingAsOfClear" hidden>Hoy</button>
+              </div>
+              <select id="rankingTeamFilter" style="width:auto;"></select>
+              <label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;white-space:nowrap;">
+                <input type="checkbox" id="rankingShowExtremes"> Mejor / peor vuelta
+              </label>
+            </div>
+          </div>
+          <div class="table-wrap"><table class="data" id="rankingTable">
+            <thead><tr><th>#</th><th>Jugador</th><th>Equipo</th><th class="num">HCP</th><th class="num">Rondas</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RONDAS -->
+    <section class="view" id="view-rondas">
+      <div class="stack">
+        <div class="row">
+          <div class="card" style="flex:1 1 340px;">
+            <div class="section-head"><div><h2>Añadir ronda</h2><p>Campo, hándicap de juego y puntos Stableford. Nada más.</p></div></div>
+            <form id="roundForm">
+              <div class="field">
+                <label>Jugador</label>
+                <div class="chip" id="rf-player-chip" style="width:100%;justify-content:space-between;">
+                  <span id="rf-player-name">—</span>
+                  <button type="button" id="rf-player-switch">¿no eres tú?</button>
+                </div>
+                <div class="hint">Solo puedes registrar rondas con tu propia identidad.</div>
+              </div>
+              <div class="grid2">
+                <div class="field">
+                  <label for="rf-course-search">Campo</label>
+                  <div class="combo">
+                    <input type="text" id="rf-course-search" autocomplete="off" placeholder="Escribe para buscar un campo…" required>
+                    <input type="hidden" id="rf-course">
+                    <div class="combo-menu" id="rf-course-menu" hidden></div>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="rf-tee">Barra</label>
+                  <select id="rf-tee" required><option value="">Elige campo primero</option></select>
+                </div>
+              </div>
+              <div class="grid2">
+                <div class="field">
+                  <label for="rf-date">Fecha</label>
+                  <input type="date" id="rf-date" required>
+                </div>
+                <div class="field">
+                  <label for="rf-hcp">Hándicap de juego</label>
+                  <input type="number" id="rf-hcp" step="1" required>
+                  <div class="hint" id="rf-hcp-hint">Sugerido según tu hándicap actual — cámbialo si jugaste con otro.</div>
+                </div>
+              </div>
+              <div class="field">
+                <label for="rf-stableford-rel">Resultado (Stableford, respecto a 36 = jugar al hándicap)</label>
+                <select id="rf-stableford-rel" required></select>
+                <div class="hint" id="rf-stableford-hint"></div>
+              </div>
+              <div class="field" id="rf-preview" hidden>
+                <div class="kv"><span>Score ajustado estimado</span><span class="num" id="rf-preview-score">–</span></div>
+                <div class="kv"><span>Diferencial de esta ronda</span><span class="num" id="rf-preview-diff">–</span></div>
+              </div>
+              <button class="btn primary" type="submit" style="width:100%;">Guardar ronda</button>
+            </form>
+          </div>
+
+          <div class="card" style="flex:1 1 200px;">
+            <h2 style="font-size:16px;">Cómo se calcula</h2>
+            <p style="font-size:13px;color:var(--ink-2);">
+              Score ajustado = Par + 36 − Stableford + Hándicap de juego.<br><br>
+              Diferencial = (Score ajustado − Course Rating) × 113 / Slope.<br><br>
+              Tu hándicap es la media de tus mejores diferenciales recientes (tabla oficial WHS), y solo cuentan las rondas <b>aprobadas</b>.
+            </p>
+          </div>
+        </div>
+
+        <div class="card">
+          <details id="importDetails">
+            <summary style="cursor:pointer;font-weight:600;">Importar historial (CSV de Handicap Tracker)</summary>
+            <p style="font-size:13px;color:var(--muted);margin:10px 0;">
+              Si vienes de la app Handicap Tracker, exporta tu historial a CSV (columnas: Round Date, Course Name, Course Par, Course Slope, Course Rating, Round Score) y pégalo aquí. Se carga como tuyo, con el score bruto de cada ronda — no hace falta reconstruir Stableford para estas.
+            </p>
+            <div class="field" id="importAsField" hidden style="margin:0 0 10px;">
+              <label for="importAsPlayer">Importar como (solo admin)</label>
+              <select id="importAsPlayer"></select>
+            </div>
+            <textarea id="importCsv" rows="6" placeholder="Round Date,Course Name,Course Par,Course Slope,Course Rating,Round Score&#10;18 Dec 2022,Entrepinos,69,126,68.0,81&#10;..."></textarea>
+            <div class="row" style="margin-top:10px;gap:8px;align-items:center;">
+              <button class="btn primary" id="importCsvBtn" type="button">Importar</button>
+              <span id="importStatus" style="font-size:13px;color:var(--muted);"></span>
+            </div>
+          </details>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <div><h2>Rondas registradas</h2><p>Las tuyas siempre se ven; las de los demás solo una vez aprobadas.</p></div>
+          </div>
+          <div class="table-wrap"><table class="data" id="roundsTable">
+            <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th>Barra</th><th class="num">HCP juego</th><th class="num">Stableford</th><th class="num">Diferencial</th><th>Estado</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EVOLUCIÓN -->
+    <section class="view" id="view-evolucion">
+      <div class="stack">
+        <div class="row">
+          <div class="card" style="flex:0 0 220px;">
+            <h2 style="font-size:16px;margin-bottom:8px;">Comparar jugadores</h2>
+            <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px;">Hasta 24 a la vez.</p>
+            <div class="checklist" id="evoPlayerList"></div>
+          </div>
+          <div class="card" style="flex:1 1 480px;">
+            <div class="section-head"><div><h2>Evolución del hándicap</h2><p>Recalculado con cada ronda aprobada.</p></div></div>
+            <div class="row" id="evoRangeControls" style="gap:10px;align-items:flex-end;margin-bottom:12px;">
+              <div class="row" style="gap:6px;">
+                <button type="button" class="btn small" data-evo-range="all">Todo</button>
+                <button type="button" class="btn small" data-evo-range="1y">Último año</button>
+                <button type="button" class="btn small" data-evo-range="ytd">Este año</button>
+              </div>
+              <div class="field" style="margin:0;flex:0 0 150px;"><label for="evoFrom">Desde</label><input type="date" id="evoFrom"></div>
+              <div class="field" style="margin:0;flex:0 0 150px;"><label for="evoTo">Hasta</label><input type="date" id="evoTo"></div>
+            </div>
+            <div id="evoChart" class="chart-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EQUIPOS -->
+    <section class="view" id="view-equipos">
+      <div class="stack">
+        <div class="row">
+          <div class="card" style="flex:1 1 280px;">
+            <div class="section-head"><div><h2>Equipos</h2><p>Cualquiera puede crear un equipo; solo el admin asigna jugadores, por ahora.</p></div></div>
+            <form id="teamForm" class="row" style="margin-bottom:14px;gap:8px;">
+              <input type="text" id="tf-name" placeholder="Nombre del equipo" required style="flex:1;min-width:140px;">
+              <button class="btn gold" type="submit">Crear equipo</button>
+            </form>
+            <p id="teamAssignNote" style="font-size:12px;color:var(--muted);margin:0 0 10px;"></p>
+            <div class="table-wrap"><table class="data" id="teamAssignTable">
+              <thead><tr><th>Jugador</th><th>Equipo</th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="card" style="flex:0 0 220px;">
+            <h2 style="font-size:16px;margin-bottom:8px;">Comparar equipos</h2>
+            <p style="font-size:12.5px;color:var(--muted);margin:0 0 8px;">Media del hándicap de sus miembros con hándicap calculado, en cada fecha.</p>
+            <div class="checklist" id="teamEvoList"></div>
+          </div>
+          <div class="card" style="flex:1 1 480px;">
+            <div class="section-head"><div><h2>Evolución del hándicap por equipo</h2><p>Recalculada con cada ronda aprobada de cualquier miembro.</p></div></div>
+            <div class="row" id="teamEvoRangeControls" style="gap:10px;align-items:flex-end;margin-bottom:12px;">
+              <div class="row" style="gap:6px;">
+                <button type="button" class="btn small" data-team-evo-range="all">Todo</button>
+                <button type="button" class="btn small" data-team-evo-range="1y">Último año</button>
+                <button type="button" class="btn small" data-team-evo-range="ytd">Este año</button>
+              </div>
+              <div class="field" style="margin:0;flex:0 0 150px;"><label for="teamEvoFrom">Desde</label><input type="date" id="teamEvoFrom"></div>
+              <div class="field" style="margin:0;flex:0 0 150px;"><label for="teamEvoTo">Hasta</label><input type="date" id="teamEvoTo"></div>
+            </div>
+            <div id="teamEvoChart" class="chart-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CAMPOS -->
+    <section class="view" id="view-campos">
+      <div class="stack">
+        <div class="card">
+          <div class="section-head"><div><h2>Añadir campo</h2><p>Cualquiera puede añadir un campo nuevo con sus barras (rating y slope oficiales).</p></div></div>
+          <form id="courseForm">
+            <div class="field">
+              <label for="cf-name">Nombre del campo</label>
+              <input type="text" id="cf-name" required placeholder="Ej. Club de Golf Ejemplo">
+            </div>
+            <label>Barras</label>
+            <div id="cf-tees"></div>
+            <button type="button" class="btn small" id="cf-add-tee" style="margin-bottom:14px;">+ Añadir barra</button>
+            <br>
+            <div id="cf-dupe-warning" class="pill warning" style="display:none;margin-bottom:10px;padding:10px 12px;line-height:1.5;"></div>
+            <button class="btn primary" type="submit" id="cf-submit-btn">Guardar campo</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="section-head"><div><h2>Campos y barras</h2><p id="camposCount"></p></div></div>
+          <div class="table-wrap"><table class="data" id="coursesTable">
+            <thead><tr><th>Campo</th><th>Barra</th><th class="num">Par</th><th class="num">CR</th><th class="num">Slope</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMIN -->
+    <section class="view" id="view-admin">
+      <div class="stack">
+        <div class="card" id="adminLocked">
+          <h2 style="font-size:17px;margin-bottom:10px;">Acceso admin</h2>
+          <p style="font-size:13px;color:var(--muted);margin:0 0 12px;">
+            PIN compartido de administración. Aviso: es un PIN sencillo visible en el código de la página, no una seguridad real — solo para evitar aprobaciones accidentales.
+          </p>
+          <form id="pinForm" class="row" style="gap:8px;">
+            <input type="password" id="pinInput" placeholder="PIN" inputmode="numeric" style="max-width:160px;">
+            <button class="btn primary" type="submit">Entrar</button>
+          </form>
+          <p id="pinError" style="color:var(--critical);font-size:13px;display:none;">PIN incorrecto.</p>
+        </div>
+
+        <div class="stack" id="adminUnlocked" hidden>
+          <div class="card">
+            <div class="section-head"><div><h2>Rondas pendientes</h2><p>Apruébalas para que cuenten en el hándicap y sean visibles para todos.</p></div>
+              <button class="btn small gold" id="approveAllBtn" type="button">Aprobar todas</button>
+            </div>
+            <div class="table-wrap"><table class="data" id="pendingTable">
+              <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th class="num">Diferencial</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+          <div class="row">
+            <div class="card" style="flex:1 1 260px;">
+              <h2 style="font-size:16px;margin-bottom:10px;">Ajustes</h2>
+              <label style="display:flex;align-items:center;gap:8px;font-weight:400;">
+                <input type="checkbox" id="autoApproveToggle" style="width:auto;">
+                Auto-aprobar rondas nuevas
+              </label>
+              <div class="field" style="margin-top:14px;">
+                <label for="newPinInput">Cambiar PIN de admin</label>
+                <div class="row" style="gap:8px;">
+                  <input type="text" id="newPinInput" placeholder="Nuevo PIN">
+                  <button class="btn small" id="savePinBtn" type="button">Guardar</button>
+                </div>
+              </div>
+            </div>
+            <div class="card" style="flex:1 1 260px;">
+              <h2 style="font-size:16px;margin-bottom:10px;">Limpieza de campos duplicados</h2>
+              <div id="adminDupeHint" style="margin-bottom:10px;"></div>
+              <div class="table-wrap"><table class="data" id="adminCoursesTable">
+                <thead><tr><th>Campo</th><th></th></tr></thead>
+                <tbody></tbody>
+              </table></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Papelera (rondas borradas)</h2><p>Registro de todas las rondas eliminadas por cualquier jugador o por el admin — no se pierden, quedan aquí para consultarlas o restaurarlas.</p></div>
+            </div>
+            <div class="table-wrap"><table class="data" id="trashTable">
+              <thead><tr><th>Fecha ronda</th><th>Jugador</th><th>Campo</th><th class="num">Diferencial</th><th>Borrada por</th><th>Cuándo</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="note">Cálculo de hándicap WHS simplificado (sin PCC ni reducción por resultado excepcional) · datos de campo cargados por el grupo, a verificar por cada club</footer>
+</div>
+
+<!-- Onboarding modal -->
+<div class="modal-backdrop" id="onboardModal" hidden>
+  <div class="modal">
+    <h2>¿Quién eres?</h2>
+    <p class="lead">Elige tu nombre de la lista, o añádete si es tu primera vez.</p>
+    <div class="player-pick" id="onboardList"></div>
+    <form id="onboardNewForm" class="row" style="gap:8px;">
+      <input type="text" id="onboardNewName" placeholder="Tu nombre" required style="flex:1;">
+      <button class="btn primary" type="submit">Soy nuevo</button>
+    </form>
+  </div>
+</div>
+
+<!-- Config de Firebase: rellena este fichero con tu propio proyecto (ver SETUP.md) -->
+<script src="firebase-config.js"></script>
+<!-- Datos iniciales (campos, barras y el histórico ya cargado) — solo se usan una vez, la primera vez que la base de datos está vacía -->
+<script src="seed-data.js"></script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getFirestore, collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, writeBatch
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  // ---------- Firebase ----------
+  var app = initializeApp(window.HCP_FIREBASE_CONFIG);
+  var db = getFirestore(app);
+
+  // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
+  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], config: { pin: '2026', autoApprove: false } };
+  var onStoreChange = null;
+  var ready = { players: false, teams: false, tees: false, rounds: false, config: false };
+  function allReady(){ return ready.players && ready.teams && ready.tees && ready.rounds && ready.config; }
+  var seeded = false;
+  function maybeSeedThenFire(){
+    if(!seeded && allReady() && Store.players.length===0 && Store.tees.length===0 && Store.rounds.length===0){
+      seeded = true;
+      seedInitialData().then(function(){ if(onStoreChange) onStoreChange(); });
+      return;
+    }
+    if(onStoreChange) onStoreChange();
+  }
+  onSnapshot(collection(db,'players'), function(snap){
+    Store.players = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    ready.players = true; maybeSeedThenFire();
+  }, function(err){ showConnError(err); });
+  onSnapshot(collection(db,'teams'), function(snap){
+    Store.teams = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    ready.teams = true; maybeSeedThenFire();
+  }, function(err){ showConnError(err); });
+  onSnapshot(collection(db,'tees'), function(snap){
+    Store.tees = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    ready.tees = true; maybeSeedThenFire();
+  }, function(err){ showConnError(err); });
+  onSnapshot(collection(db,'rounds'), function(snap){
+    Store.rounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    ready.rounds = true; maybeSeedThenFire();
+  }, function(err){ showConnError(err); });
+  onSnapshot(doc(db,'config','main'), function(d){
+    Store.config = d.exists() ? d.data() : { pin: '2026', autoApprove: false };
+    ready.config = true; maybeSeedThenFire();
+  }, function(err){ showConnError(err); });
+  // Papelera de rondas borradas: colección aparte, de solo consulta para el admin — no forma
+  // parte de la comprobación de "base de datos vacía" ni bloquea el primer render.
+  onSnapshot(collection(db,'deletedRounds'), function(snap){
+    Store.deletedRounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    if(onStoreChange) onStoreChange();
+  }, function(err){ showConnError(err); });
+
+  function showConnError(err){
+    var b = document.getElementById('syncBanner');
+    b.hidden = false;
+    b.textContent = 'No se puede conectar con la base de datos (' + (err && err.code || 'error') + '). Revisa firebase-config.js y las reglas de Firestore — ver SETUP.md.';
+  }
+
+  async function seedInitialData(){
+    var batch = writeBatch(db);
+    SEED.players.forEach(function(p){ batch.set(doc(db,'players', p.id), { name: p.name, team: p.team || '' }); });
+    SEED.tees.forEach(function(t){ batch.set(doc(collection(db,'tees')), t); });
+    SEED.rounds.forEach(function(r){ batch.set(doc(collection(db,'rounds')), r); });
+    batch.set(doc(db,'config','main'), SEED.config || { pin: '2026', autoApprove: false });
+    await batch.commit();
+  }
+
+  // ---------- Operaciones de escritura (sustituyen a las mutaciones directas del DOM) ----------
+  var StoreOps = {
+    setPlayer: function(id, data){ return setDoc(doc(db,'players', id), data, { merge: true }); },
+    addTee: function(data){ return addDoc(collection(db,'tees'), data); },
+    addRound: function(data){ return addDoc(collection(db,'rounds'), data); },
+    updateRound: function(id, patch){ return updateDoc(doc(db,'rounds', id), patch); },
+    deleteRound: function(id){ return deleteDoc(doc(db,'rounds', id)); },
+    logDeletedRound: function(entry){ return addDoc(collection(db,'deletedRounds'), entry); },
+    deleteTrashEntry: function(id){ return deleteDoc(doc(db,'deletedRounds', id)); },
+    setTeam: function(id, data){ return setDoc(doc(db,'teams', id), data, { merge: true }); },
+    setConfig: function(patch){ return setDoc(doc(db,'config','main'), patch, { merge: true }); },
+    batchAddTees: function(list){
+      var b = writeBatch(db);
+      list.forEach(function(t){ b.set(doc(collection(db,'tees')), t); });
+      return b.commit();
+    },
+    batchAddRounds: function(list){
+      var b = writeBatch(db);
+      list.forEach(function(r){ b.set(doc(collection(db,'rounds')), r); });
+      return b.commit();
+    },
+    batchApproveRounds: function(ids){
+      var b = writeBatch(db);
+      ids.forEach(function(id){ b.update(doc(db,'rounds', id), { status: 'aprobada' }); });
+      return b.commit();
+    },
+    batchDeleteTees: function(ids){
+      var b = writeBatch(db);
+      ids.forEach(function(id){ b.delete(doc(db,'tees', id)); });
+      return b.commit();
+    }
+  };
+
+  // ---------- helpers ----------
+  var $ = function(sel, root){ return (root||document).querySelector(sel); };
+  var $all = function(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); };
+  var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+  var round1 = function(x){ return Math.round(x*10)/10; };
+  function catColor(idx){ return "var(--s"+((idx%8)+1)+")"; }
+
+  var LS_KEY = "hcpApp:playerId";
+
+  // ---------- WHS table ----------
+  function diffsConfig(n){
+    if(n<3) return null;
+    if(n===3) return {use:1, adj:-2.0};
+    if(n===4) return {use:1, adj:-1.0};
+    if(n===5) return {use:1, adj:0};
+    if(n===6) return {use:2, adj:-1.0};
+    if(n===7||n===8) return {use:2, adj:0};
+    if(n>=9 && n<=11) return {use:3, adj:0};
+    if(n>=12 && n<=14) return {use:4, adj:0};
+    if(n===15||n===16) return {use:5, adj:0};
+    if(n===17||n===18) return {use:6, adj:0};
+    if(n===19) return {use:7, adj:0};
+    return {use:8, adj:0};
+  }
+  function computeHCI(diffsAsc){ // array of numbers, chronological ascending
+    var recent = diffsAsc.slice(-20);
+    var n = recent.length;
+    var conf = diffsConfig(n);
+    if(!conf) return null;
+    var sorted = recent.slice().sort(function(a,b){return a-b;});
+    var used = sorted.slice(0, conf.use);
+    var avg = used.reduce(function(s,x){return s+x;},0)/used.length;
+    return round1(avg + conf.adj);
+  }
+  function courseHandicap(hci, sr, cr, par){
+    if(hci==null) return 0;
+    return Math.round(hci * (sr/113) + (cr - par));
+  }
+
+  // ---------- data access (lee de la caché del Store) ----------
+  function players(){
+    return Store.players.map(function(p){ return { id: p.id, name: p.name, team: p.team||"" }; });
+  }
+  function teams(){
+    return Store.teams.map(function(t){ return { id: t.id, name: t.name }; });
+  }
+  function tees(){
+    return Store.tees.map(function(t){ return { id: t.id, course: t.course, color: t.color, cr: parseFloat(t.cr), sr: parseFloat(t.sr), par: parseInt(t.par,10) }; });
+  }
+  function courseNames(){
+    var seen = {}; var out = [];
+    tees().forEach(function(t){ if(!seen[t.course]){ seen[t.course]=true; out.push(t.course); } });
+    return out;
+  }
+
+  // ---------- duplicate-avoidance helpers (para altas manuales e importaciones) ----------
+  // Normaliza un nombre de campo para comparar: minúsculas, sin acentos, sin puntuación, espacios colapsados.
+  function normName(s){
+    return String(s||'')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '') // quita acentos
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  // Palabras genéricas/de barra que se ignoran al comparar nombres por "conjunto de palabras"
+  // (ver courseNamesLikelyMatch) — así "Aldeamayor Golf" reconoce "Aldeamayor Club de Golf" aunque
+  // el orden de las palabras no coincida, y "Entrepinos Blancas" reconoce "Club de Golf Entrepinos"
+  // aunque el nombre del color de la barra no forme parte del nombre real del club.
+  var GENERIC_COURSE_WORDS = {golf:1,club:1,de:1,del:1,la:1,el:1,los:1,las:1,real:1,campo:1,course:1,cg:1,deportivo:1};
+  var TEE_COLOR_WORDS = {negras:1,negra:1,azules:1,azul:1,blancas:1,blanca:1,amarillas:1,amarilla:1,
+    verdes:1,verde:1,doradas:1,dorada:1,rojas:1,roja:1,rosas:1,rosa:1};
+  function significantTokens(normalized){
+    return normalized.split(' ').filter(function(w){ return w && !GENERIC_COURSE_WORDS[w] && !TEE_COLOR_WORDS[w]; });
+  }
+  // Compara dos nombres ya normalizados (normName) y decide si probablemente son el mismo club,
+  // en tres niveles cada vez más permisivos: igualdad exacta; contención textual (uno dentro del
+  // otro, como antes); y por último, conjunto de palabras significativas (sin contar "golf",
+  // "club", artículos, ni nombres de color de barra) — el más corto de los dos debe estar
+  // totalmente contenido en el más largo, sin importar el orden ("Saldaña Golf" vs "Club
+  // Deportivo Golf Saldaña de Burgos" → ambos reducen a incluir "saldaña").
+  function courseNamesLikelyMatch(a, b){
+    if(a === b) return true;
+    if(a.length>=4 && b.length>=4 && (a.indexOf(b)!==-1 || b.indexOf(a)!==-1)) return true;
+    var ta = significantTokens(a), tb = significantTokens(b);
+    if(ta.length===0 || tb.length===0) return false;
+    var shorter = ta.length<=tb.length ? ta : tb;
+    var longerSet = {};
+    (ta.length<=tb.length ? tb : ta).forEach(function(w){ longerSet[w]=true; });
+    return shorter.every(function(w){ return longerSet[w]; });
+  }
+  // Busca entre los campos ya existentes uno que probablemente sea el mismo club que rawName.
+  // Devuelve el nombre canónico ya existente, o null si no hay ningún candidato razonable.
+  function findExistingCourseName(rawName){
+    var n = normName(rawName);
+    if(n.length < 4) return null; // demasiado corto para comparar con garantías
+    var names = courseNames();
+    for(var i=0;i<names.length;i++){ if(normName(names[i])===n) return names[i]; }
+    var best = null, bestLen = 0;
+    names.forEach(function(existing){
+      var en = normName(existing);
+      if(en.length < 4) return;
+      if(courseNamesLikelyMatch(n, en)){
+        var overlapLen = Math.min(en.length, n.length);
+        if(overlapLen > bestLen){ best = existing; bestLen = overlapLen; }
+      }
+    });
+    return best;
+  }
+  // Dado un campo ya resuelto y unos datos de barra, busca si ya existe una barra prácticamente
+  // igual (mismo par, CR/slope muy próximos) para no crear una barra duplicada con otro nombre de color.
+  function findMatchingTee(courseName, cr, sr, par){
+    var candidates = tees().filter(function(t){ return t.course === courseName; });
+    for(var i=0;i<candidates.length;i++){
+      var t = candidates[i];
+      if(t.par===par && Math.abs(t.cr-cr)<=0.15 && Math.abs(t.sr-sr)<=1) return t;
+    }
+    return null;
+  }
+  // Compara todos los nombres de campo entre sí y devuelve pares que probablemente sean
+  // el mismo club con nombres distintos, para que el admin los revise en la pestaña Admin.
+  function findPossibleDuplicateCoursePairs(){
+    var names = courseNames();
+    var pairs = [];
+    for(var i=0;i<names.length;i++){
+      for(var j=i+1;j<names.length;j++){
+        if(names[i]===names[j]) continue;
+        var a = normName(names[i]), b = normName(names[j]);
+        if(a.length<4 || b.length<4) continue;
+        if(courseNamesLikelyMatch(a, b)){
+          pairs.push([names[i], names[j]]);
+        }
+      }
+    }
+    return pairs;
+  }
+  function rounds(){
+    return Store.rounds.map(function(r){
+      return {
+        id: r.id, player: r.player, course: r.course, tee: r.tee,
+        date: r.date, stableford: parseFloat(r.stableford), hcp: parseFloat(r.hcp),
+        cr: parseFloat(r.cr), sr: parseFloat(r.sr), par: parseFloat(r.par),
+        differential: parseFloat(r.differential), status: r.status,
+        mode: r.mode || 'sf', score: (r.score!=null) ? parseFloat(r.score) : null
+      };
+    });
+  }
+  function config(){
+    return { pin: Store.config.pin || '2026', autoApprove: Store.config.autoApprove === true };
+  }
+  function deletedRounds(){
+    return Store.deletedRounds.map(function(r){ return Object.assign({}, r, { id: r.id }); });
+  }
+
+  // Borra una ronda pero primero deja constancia completa en la "papelera" (colección
+  // deletedRounds): quién la borró, cuándo, y todos los datos de la ronda tal cual estaba.
+  // Así ninguna ronda se pierde de verdad — queda consultable (y restaurable) desde Admin.
+  function deleteRoundWithLog(round, reason){
+    var actor = players().find(function(p){ return p.id === myId(); });
+    var owner = players().find(function(p){ return p.id === round.player; });
+    var entry = {
+      roundId: round.id, player: round.player, playerName: owner ? owner.name : '—',
+      course: round.course, tee: round.tee, date: round.date,
+      score: round.score, hcp: round.hcp, stableford: round.stableford,
+      cr: round.cr, sr: round.sr, par: round.par,
+      differential: round.differential, status: round.status, mode: round.mode || 'sf',
+      deletedAt: new Date().toISOString(),
+      deletedByPlayerId: myId() || null,
+      deletedByPlayerName: actor ? actor.name : '—',
+      deletedAsAdmin: !!adminUnlocked,
+      reason: reason || 'manual'
+    };
+    return StoreOps.logDeletedRound(entry).then(function(){ return StoreOps.deleteRound(round.id); });
+  }
+
+  function cmpDateAsc(a,b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); }
+  function cmpDateDesc(a,b){ return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); }
+  // Array.prototype.sort is stable (ES2019+): for equal dates, rounds keep their
+  // original insertion order, so the one entered first is treated as the older one.
+  function approvedRoundsFor(playerId){
+    return rounds().filter(function(r){ return r.player===playerId && r.status==='aprobada'; })
+      .sort(cmpDateAsc);
+  }
+
+  function currentHCIFor(playerId){
+    var diffs = approvedRoundsFor(playerId).map(function(r){ return r.differential; });
+    return computeHCI(diffs);
+  }
+  // Hándicap índice de un jugador tal y como estaba en una fecha concreta (para la
+  // clasificación "a fecha" del Ranking): el último valor calculado de su serie de
+  // evolución en o antes de esa fecha. Si todavía no tenía hándicap calculado en esa
+  // fecha (menos de 3 rondas aprobadas hasta entonces), devuelve null, igual que hoy.
+  function hciAsOfDate(playerId, dateIso){
+    var series = hciSeriesFor(playerId); // ascendente por fecha
+    var last = null;
+    for(var i=0;i<series.length;i++){
+      if(series[i].date <= dateIso) last = series[i]; else break;
+    }
+    return last ? last.hci : null;
+  }
+  function roundsCountAsOfDate(playerId, dateIso){
+    return approvedRoundsFor(playerId).filter(function(r){ return r.date <= dateIso; }).length;
+  }
+  // Rondas jugadas en el periodo ENTRE una fecha pasada y hoy (sin contar la propia fecha
+  // pasada, que ya está reflejada en el hándicap "a fecha" — solo las que vinieron después).
+  function roundsPlayedBetween(playerId, fromDateIsoExclusive, toDateIsoInclusive){
+    return approvedRoundsFor(playerId).filter(function(r){
+      return r.date > fromDateIsoExclusive && r.date <= toDateIsoInclusive;
+    }).length;
+  }
+  // Mejor y peor ronda de un jugador (por diferencial — es la única medida comparable entre
+  // rondas de campos/pares distintos) dentro de un periodo: si se pasa `fromDateIsoExclusive`,
+  // solo las rondas jugadas después de esa fecha (el mismo "periodo" que usa el ranking a
+  // fecha concreta); si no se pasa nada, sobre TODO el histórico aprobado del jugador.
+  function extremeRoundsFor(playerId, fromDateIsoExclusive){
+    var rs = approvedRoundsFor(playerId);
+    if(fromDateIsoExclusive){ rs = rs.filter(function(r){ return r.date > fromDateIsoExclusive; }); }
+    if(rs.length===0) return { best:null, worst:null };
+    var best = rs[0], worst = rs[0];
+    rs.forEach(function(r){
+      if(r.differential < best.differential) best = r;
+      if(r.differential > worst.differential) worst = r;
+    });
+    return { best:best, worst:worst };
+  }
+  function hciSeriesFor(playerId){
+    var rs = approvedRoundsFor(playerId);
+    var out = [];
+    for(var i=0;i<rs.length;i++){
+      var diffs = rs.slice(0,i+1).map(function(r){ return r.differential; });
+      var hci = computeHCI(diffs);
+      if(hci!=null) out.push({ date: rs[i].date, hci: hci });
+    }
+    return out;
+  }
+  // Evolución del hándicap MEDIO de un equipo: en cada fecha en la que a algún miembro le
+  // cambia su hándicap índice, se promedia el último hándicap conocido de cada miembro hasta
+  // esa fecha (a los miembros que todavía no tienen hándicap calculado no cuentan ese día).
+  // Es el mismo principio que "Media del hándicap actual" que ya se mostraba, pero calculado
+  // en cada fecha en vez de solo con el valor de hoy — así se puede ver su evolución y
+  // compararla por periodos igual que con jugadores individuales.
+  function teamHciSeriesFor(teamId){
+    var members = players().filter(function(p){ return p.team === teamId; });
+    var memberSeries = members.map(function(p){ return hciSeriesFor(p.id); });
+    var dateSet = {};
+    memberSeries.forEach(function(s){ s.forEach(function(pt){ dateSet[pt.date] = true; }); });
+    var dates = Object.keys(dateSet).sort();
+    var out = [];
+    dates.forEach(function(d){
+      var vals = [];
+      memberSeries.forEach(function(s){
+        var last = null;
+        for(var i=0;i<s.length;i++){ if(s[i].date <= d) last = s[i]; else break; }
+        if(last) vals.push(last.hci);
+      });
+      if(vals.length){
+        out.push({ date: d, hci: round1(vals.reduce(function(a,b){return a+b;},0) / vals.length) });
+      }
+    });
+    return out;
+  }
+
+  // ---------- identity ----------
+  function myId(){ try{ return localStorage.getItem(LS_KEY); }catch(e){ return null; } }
+  function setMyId(id){ try{ localStorage.setItem(LS_KEY, id); }catch(e){} }
+
+  function renderWhoAmI(){
+    var box = $('#whoamiBox');
+    var id = myId();
+    var p = players().find(function(x){ return x.id===id; });
+    if(!p){ box.innerHTML=''; return; }
+    box.innerHTML = '<span class="chip">'+esc(p.name)+' <button id="switchIdBtn" type="button">cambiar</button></span>';
+    $('#switchIdBtn').addEventListener('click', function(){ openOnboard(true); });
+  }
+
+  function openOnboard(forceSwitch){
+    var modal = $('#onboardModal');
+    var list = $('#onboardList');
+    var ps = players();
+    if(ps.length===0){
+      list.innerHTML = '<p class="empty">Todavía no hay nadie. Sé el primero.</p>';
+    } else {
+      list.innerHTML = ps.map(function(p){
+        return '<button type="button" data-pick="'+esc(p.id)+'">'+esc(p.name)+'</button>';
+      }).join('');
+    }
+    modal.hidden = false;
+    $all('[data-pick]', list).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        setMyId(btn.getAttribute('data-pick'));
+        modal.hidden = true;
+        renderWhoAmI(); render();
+      });
+    });
+  }
+
+  $('#onboardNewForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var name = $('#onboardNewName').value.trim();
+    if(!name) return;
+    var id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    StoreOps.setPlayer(id, { name: name, team: '' }).then(function(){
+      setMyId(id);
+      $('#onboardNewName').value = '';
+      $('#onboardModal').hidden = true;
+      renderWhoAmI(); render();
+    });
+  });
+
+  // ---------- tabs ----------
+  var VIEWS = ["ranking","rondas","evolucion","equipos","campos","admin"];
+  function showView(name){
+    VIEWS.forEach(function(v){
+      $('#view-'+v).classList.toggle('active', v===name);
+    });
+    $all('.tab-btn').forEach(function(b){
+      b.setAttribute('aria-selected', b.dataset.view===name ? 'true':'false');
+    });
+    try{ sessionStorage.setItem('hcpApp:tab', name); }catch(e){}
+  }
+  $('#tabs').addEventListener('click', function(e){
+    var btn = e.target.closest('.tab-btn');
+    if(!btn) return;
+    showView(btn.dataset.view);
+  });
+
+  // ---------- Ranking view ----------
+  // "Ver a fecha": cuando tiene valor, la clasificación se recalcula tal y como estaba
+  // ese día (solo con las rondas aprobadas hasta esa fecha), en vez de con el estado actual.
+  var rankingAsOf = null;
+  var rankingShowExtremes = false;
+  $('#rankingAsOfDate').max = todayIso();
+  function renderRanking(){
+    var ps = players();
+    var asOf = rankingAsOf;
+    var today = todayIso();
+    var showExt = rankingShowExtremes;
+    var withHci = ps.map(function(p){
+      var extremes = showExt ? extremeRoundsFor(p.id, asOf) : null;
+      if(asOf){
+        return {
+          p:p,
+          hci: hciAsOfDate(p.id, asOf), n: roundsCountAsOfDate(p.id, asOf),
+          hciToday: currentHCIFor(p.id), nPeriodo: roundsPlayedBetween(p.id, asOf, today),
+          extremes: extremes
+        };
+      }
+      return { p:p, hci: currentHCIFor(p.id), n: approvedRoundsFor(p.id).length, extremes: extremes };
+    });
+    var filterTeam = $('#rankingTeamFilter').value || '';
+    var tms = teams();
+    var filterSel = $('#rankingTeamFilter');
+    filterSel.innerHTML = '<option value="">Todos los equipos</option>' +
+      tms.map(function(t){ return '<option value="'+esc(t.id)+'">'+esc(t.name)+'</option>'; }).join('');
+    filterSel.value = filterTeam;
+
+    $('#rankingSubtitle').textContent = asOf
+      ? ('Clasificación tal y como estaba el ' + fmtDateShort(asOf, true) + ', comparada con hoy.')
+      : 'Ordenado de mejor (más bajo) a peor hándicap.';
+
+    var rows = withHci.filter(function(x){ return x.hci!=null; });
+    if(filterTeam) rows = rows.filter(function(x){ return x.p.team===filterTeam; });
+    rows.sort(function(a,b){ return a.hci-b.hci; });
+
+    $('#statPlayers').textContent = withHci.filter(function(x){return x.hci!=null;}).length;
+    $('#statRounds').textContent = rounds().filter(function(r){return r.status==='aprobada';}).length;
+    $('#statCourses').textContent = courseNames().length;
+
+    var extremesHead = showExt ? '<th class="num">Mejor vuelta</th><th class="num">Peor vuelta</th>' : '';
+    var nCols = (asOf ? 7 : 4) + (showExt ? 2 : 0) + 1; // +1 por la columna "#"
+    var thead = $('#rankingTable thead');
+    thead.innerHTML = asOf
+      ? ('<tr><th>#</th><th>Jugador</th><th>Equipo</th>'+
+         '<th class="num">HCP a '+esc(fmtDateShort(asOf,false))+'</th>'+
+         '<th class="num">HCP hoy (referencia)</th>'+
+         '<th class="num">Diferencia</th>'+
+         '<th class="num">Rondas totales</th>'+
+         '<th class="num">Rondas periodo</th>'+extremesHead+'</tr>')
+      : ('<tr><th>#</th><th>Jugador</th><th>Equipo</th><th class="num">HCP</th><th class="num">Rondas</th>'+extremesHead+'</tr>');
+
+    // Celda "mejor/peor vuelta": diferencial + fecha corta, o "—" si no hay ninguna ronda en
+    // el periodo correspondiente (jugador nuevo, o sin rondas desde la fecha elegida).
+    function extremeCell(r){
+      if(!r) return '—';
+      return r.differential.toFixed(1)+' <span style="color:var(--muted);font-size:11px;">('+fmtDateShort(r.date,false)+')</span>';
+    }
+
+    var tbody = $('#rankingTable tbody');
+    if(rows.length===0){
+      var msg = asOf
+        ? ('Nadie tenía hándicap calculado todavía el ' + fmtDateShort(asOf, true) + '.')
+        : 'Nadie tiene hándicap todavía (hacen falta al menos 3 rondas aprobadas).';
+      tbody.innerHTML = '<tr><td colspan="'+nCols+'" class="empty">'+msg+'</td></tr>';
+      return;
+    }
+    tbody.innerHTML = rows.map(function(x,i){
+      var teamName = tms.find(function(t){return t.id===x.p.team;});
+      var base = '<tr><td class="num">'+(i+1)+'</td><td>'+esc(x.p.name)+'</td><td>'+(teamName?esc(teamName.name):'—')+'</td>' +
+        '<td class="num">'+x.hci.toFixed(1)+'</td>';
+      var extremesCells = showExt ? ('<td class="num">'+extremeCell(x.extremes.best)+'</td><td class="num">'+extremeCell(x.extremes.worst)+'</td>') : '';
+      if(asOf){
+        var todayCell = x.hciToday!=null ? x.hciToday.toFixed(1) : '—';
+        var diffCell = '—';
+        if(x.hciToday!=null){
+          var diff = x.hciToday - x.hci; // negativo = ha mejorado (hándicap más bajo) desde esa fecha
+          var cls = diff < -0.05 ? 'good' : (diff > 0.05 ? 'warning' : 'muted');
+          var sign = diff>0 ? '+' : '';
+          diffCell = '<span class="pill '+cls+'">'+sign+diff.toFixed(1)+'</span>';
+        }
+        return base + '<td class="num">'+todayCell+'</td><td class="num">'+diffCell+'</td>' +
+          '<td class="num">'+x.n+'</td><td class="num">'+x.nPeriodo+'</td>'+extremesCells+'</tr>';
+      }
+      return base + '<td class="num">'+x.n+'</td>'+extremesCells+'</tr>';
+    }).join('');
+  }
+  $('#rankingTeamFilter').addEventListener('change', renderRanking);
+  $('#rankingShowExtremes').addEventListener('change', function(){
+    rankingShowExtremes = $('#rankingShowExtremes').checked;
+    renderRanking();
+  });
+  $('#rankingAsOfDate').addEventListener('change', function(){
+    rankingAsOf = $('#rankingAsOfDate').value || null;
+    $('#rankingAsOfClear').hidden = !rankingAsOf;
+    renderRanking();
+  });
+  // Acceso rápido a "hace un año" — con una competición anual de por medio, es la comparación
+  // que se va a querer mirar más a menudo, así que se ahorra tener que abrir el selector de
+  // fecha y calcular a mano qué día era hace un año (mismo criterio de 365 días que el botón
+  // "Último año" de la vista Evolución).
+  $('#rankingAsOfYearAgo').addEventListener('click', function(){
+    rankingAsOf = isoDateNDaysAgo(365);
+    $('#rankingAsOfDate').value = rankingAsOf;
+    $('#rankingAsOfClear').hidden = false;
+    renderRanking();
+  });
+  $('#rankingAsOfClear').addEventListener('click', function(){
+    rankingAsOf = null;
+    $('#rankingAsOfDate').value = '';
+    $('#rankingAsOfClear').hidden = true;
+    renderRanking();
+  });
+
+  // ---------- Rondas view ----------
+  // Selector de campo con búsqueda por texto: con muchos campos cargados (decenas), un
+  // desplegable plano se hace incómodo — este combobox deja escribir cualquier parte del
+  // nombre (sin acentos, sin importar mayúsculas) y muestra los que coinciden para elegir.
+  // `#rf-course` sigue siendo el campo "real" (hidden) que lee el resto del código tal cual
+  // (mismo `.value` de siempre, mismo evento `change`); `#rf-course-search` es solo la parte
+  // visible con la que escribe el usuario.
+  function courseCombo(inputEl, hiddenEl, menuEl){
+    var matches = [], activeIdx = -1;
+    function closeMenu(){ menuEl.hidden = true; menuEl.innerHTML = ''; activeIdx = -1; }
+    function renderMenu(query){
+      var names = courseNames().slice().sort(function(a,b){ return a.localeCompare(b, 'es'); });
+      var q = normName(query || '');
+      matches = q ? names.filter(function(n){ return normName(n).indexOf(q) !== -1; }) : names;
+      if(matches.length === 0){
+        menuEl.innerHTML = '<div class="empty">Ningún campo coincide con “'+esc(query)+'”. Créalo desde la pestaña Campos.</div>';
+        menuEl.hidden = false;
+        return;
+      }
+      menuEl.innerHTML = matches.map(function(n, i){ return '<button type="button" data-idx="'+i+'">'+esc(n)+'</button>'; }).join('');
+      menuEl.hidden = false;
+      activeIdx = -1;
+    }
+    function markActive(){
+      $all('button', menuEl).forEach(function(b, i){ b.classList.toggle('active', i === activeIdx); });
+      var activeBtn = menuEl.querySelector('button.active');
+      if(activeBtn) activeBtn.scrollIntoView({ block: 'nearest' });
+    }
+    function pick(name){
+      hiddenEl.value = name;
+      inputEl.value = name;
+      closeMenu();
+      hiddenEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    inputEl.addEventListener('input', function(){
+      if(hiddenEl.value && hiddenEl.value !== inputEl.value) hiddenEl.value = ''; // texto cambiado a mano: se invalida la selección hasta elegir de nuevo
+      renderMenu(inputEl.value);
+    });
+    inputEl.addEventListener('focus', function(){ renderMenu(inputEl.value); });
+    inputEl.addEventListener('keydown', function(e){
+      if(menuEl.hidden) return;
+      if(e.key === 'ArrowDown'){ e.preventDefault(); activeIdx = Math.min(activeIdx+1, matches.length-1); markActive(); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); markActive(); }
+      else if(e.key === 'Enter'){ if(activeIdx>=0 && matches[activeIdx]){ e.preventDefault(); pick(matches[activeIdx]); } }
+      else if(e.key === 'Escape'){ closeMenu(); }
+    });
+    menuEl.addEventListener('mousedown', function(e){
+      var btn = e.target.closest('button[data-idx]');
+      if(!btn) return;
+      e.preventDefault(); // evita el blur del input al hacer clic en una sugerencia
+      pick(matches[parseInt(btn.getAttribute('data-idx'), 10)]);
+    });
+    document.addEventListener('click', function(e){
+      if(e.target !== inputEl && !menuEl.contains(e.target)) closeMenu();
+    });
+    // Si el usuario escribe texto libre y se va del campo sin elegir ninguna sugerencia
+    // (clic fuera, Tab…), se resuelve solo si el texto coincide EXACTO con un campo real
+    // (aparte de mayúsculas/acentos); si no, se vacía para que el campo quede claramente
+    // "sin elegir" en vez de dar la falsa sensación de que ya hay un campo seleccionado.
+    inputEl.addEventListener('blur', function(){
+      setTimeout(function(){
+        if(hiddenEl.value) return;
+        var typed = inputEl.value.trim();
+        if(!typed) return;
+        var exact = courseNames().find(function(n){ return normName(n) === normName(typed); });
+        if(exact) pick(exact); else inputEl.value = '';
+      }, 150);
+    });
+    return {
+      setValue: function(name){ hiddenEl.value = name || ''; inputEl.value = name || ''; }
+    };
+  }
+  var rfCourseCombo = courseCombo($('#rf-course-search'), $('#rf-course'), $('#rf-course-menu'));
+  function populateTeeSelect(courseName){
+    var sel = $('#rf-tee');
+    var ts = tees().filter(function(t){ return t.course===courseName; });
+    if(ts.length===0){ sel.innerHTML = '<option value="">Elige campo primero</option>'; return; }
+    sel.innerHTML = '<option value="">Elige barra…</option>' + ts.map(function(t){
+      return '<option value="'+esc(t.color)+'">'+esc(t.color)+' (CR '+t.cr+' / SR '+t.sr+' / Par '+t.par+')</option>';
+    }).join('');
+  }
+
+  function updateSuggestedHcp(){
+    var pid = myId();
+    var courseName = $('#rf-course').value;
+    var teeColor = $('#rf-tee').value;
+    if(!pid || !courseName || !teeColor) return;
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor; });
+    if(!tee) return;
+    var hci = currentHCIFor(pid);
+    var ch = courseHandicap(hci, tee.sr, tee.cr, tee.par);
+    $('#rf-hcp').value = ch;
+    $('#rf-hcp-hint').textContent = hci==null
+      ? 'Todavía sin hándicap propio (menos de 3 rondas) — sugerido 0, ajústalo a mano.'
+      : 'Sugerido a partir de tu hándicap actual ('+hci.toFixed(1)+'). Edítalo si jugaste con otro.';
+    updatePreview();
+  }
+
+  // ---------- Stableford result field (relative to 36 = playing to handicap) ----------
+  function populateStablefordSelect(){
+    var sel = $('#rf-stableford-rel');
+    var opts = [];
+    for(var v=-18; v<=20; v++){
+      var label = v===0 ? 'Al par (36 puntos)' : (v>0 ? '+'+v : String(v));
+      opts.push('<option value="'+v+'">'+label+'</option>');
+    }
+    opts.push('<option value="over">Más de +20…</option>');
+    sel.innerHTML = opts.join('');
+    sel.value = '0';
+  }
+  function getStablefordPoints(){
+    var sel = $('#rf-stableford-rel').value;
+    if(sel === 'over') return 15; // peor que +20 (menos de 16 puntos): se fija en 15
+    return 36 - parseInt(sel, 10); // negativo = mejor que jugar al hándicap (más puntos)
+  }
+  function updateStablefordUI(){
+    var pts = getStablefordPoints();
+    $('#rf-stableford-hint').textContent = '= ' + pts + ' puntos Stableford.';
+  }
+  $('#rf-stableford-rel').addEventListener('change', function(){ updateStablefordUI(); updatePreview(); });
+  populateStablefordSelect();
+  updateStablefordUI();
+
+  function updatePreview(){
+    var courseName = $('#rf-course').value, teeColor = $('#rf-tee').value;
+    var hcp = parseFloat($('#rf-hcp').value);
+    var pts = getStablefordPoints();
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor; });
+    var box = $('#rf-preview');
+    if(!tee || isNaN(hcp) || isNaN(pts)){ box.hidden = true; return; }
+    var adjScore = tee.par + 36 - pts + hcp;
+    var diff = round1((adjScore - tee.cr) * 113 / tee.sr);
+    $('#rf-preview-score').textContent = adjScore;
+    $('#rf-preview-diff').textContent = diff.toFixed(1);
+    box.hidden = false;
+  }
+
+  ['#rf-course'].forEach(function(sel){
+    $(sel).addEventListener('change', function(){
+      populateTeeSelect($('#rf-course').value);
+      updateSuggestedHcp();
+    });
+  });
+  $('#rf-tee').addEventListener('change', updateSuggestedHcp);
+  $('#rf-hcp').addEventListener('input', updatePreview);
+
+  $('#roundForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var pid = myId();
+    var courseName = $('#rf-course').value;
+    var teeColor = $('#rf-tee').value;
+    var date = $('#rf-date').value;
+    var hcp = parseFloat($('#rf-hcp').value);
+    var pts = getStablefordPoints();
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor; });
+    if(!pid || !players().some(function(p){return p.id===pid;})){ openOnboard(); return; }
+    if(!tee || !date || isNaN(hcp) || isNaN(pts)) return;
+
+    var adjScore = tee.par + 36 - pts + hcp;
+    var diff = round1((adjScore - tee.cr) * 113 / tee.sr);
+    var status = config().autoApprove ? 'aprobada' : 'pendiente';
+
+    StoreOps.addRound({
+      player: pid, course: courseName, tee: teeColor, date: date,
+      stableford: pts, hcp: hcp, cr: tee.cr, sr: tee.sr, par: tee.par,
+      differential: diff, status: status, mode: 'sf'
+    }).then(function(){
+      $('#rf-stableford-rel').value = '0';
+      updateStablefordUI();
+      $('#rf-preview').hidden = true;
+      render();
+    });
+  });
+
+  function roundResultCells(r){
+    // Returns the "HCP juego" and "Stableford" <td>s, adapted for rounds imported
+    // as a raw gross score (e.g. from Handicap Tracker) instead of Stableford + hcp de juego.
+    if(r.mode === 'raw'){
+      return '<td class="num">—</td><td class="num">Score bruto '+r.score+'</td>';
+    }
+    return '<td class="num">'+r.hcp+'</td><td class="num">'+r.stableford+'</td>';
+  }
+
+  // ---------- Importar CSV (formato de exportación de Handicap Tracker) ----------
+  var MONTHS3 = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+  function parseHandicapTrackerCsv(text){
+    var lines = text.split(/\r?\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+    var out = [];
+    lines.forEach(function(line){
+      if(/^Round Date/i.test(line)) return; // cabecera
+      var parts = line.split(',');
+      if(parts.length < 6) return;
+      var dateS = parts[0].trim(), course = parts[1].trim();
+      var par = parseInt(parts[2],10), slope = parseInt(parts[3],10), rating = parseFloat(parts[4]), score = parseInt(parts[5],10);
+      var m = dateS.match(/^(\d{1,2})\s+([A-Za-z]{3})\w*\s+(\d{4})$/);
+      if(!m || !course || isNaN(par) || isNaN(slope) || isNaN(rating) || isNaN(score)) return;
+      var monKey = m[2].slice(0,1).toUpperCase() + m[2].slice(1,3).toLowerCase();
+      var mon = MONTHS3[monKey];
+      if(!mon) return;
+      var iso = m[3] + '-' + (mon<10?'0':'') + mon + '-' + (parseInt(m[1],10)<10?'0':'') + parseInt(m[1],10);
+      out.push({ date: iso, course: course, par: par, sr: slope, cr: rating, score: score });
+    });
+    return out;
+  }
+
+  function renderImportAsSelector(){
+    var field = $('#importAsField'), sel = $('#importAsPlayer');
+    if(!adminUnlocked){ field.hidden = true; return; }
+    field.hidden = false;
+    var keep = sel.value;
+    var ps = players();
+    sel.innerHTML = ps.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
+    if(keep && ps.some(function(p){ return p.id===keep; })) sel.value = keep;
+    else if(myId() && ps.some(function(p){ return p.id===myId(); })) sel.value = myId();
+  }
+
+  async function importCsvRows(){
+    var text = $('#importCsv').value;
+    var parsed = parseHandicapTrackerCsv(text);
+    var statusEl = $('#importStatus');
+    // Por defecto cada usuario solo puede importar rondas para sí mismo. Excepción: en modo
+    // admin se puede elegir el jugador destino (útil para pruebas con datos de varios usuarios reales).
+    var pid = (adminUnlocked && $('#importAsPlayer').value) ? $('#importAsPlayer').value : myId();
+    if(!pid || !players().some(function(p){ return p.id===pid; })){ openOnboard(); return; }
+    if(parsed.length===0){ statusEl.textContent = 'No se ha reconocido ninguna fila válida en ese texto.'; return; }
+
+    statusEl.textContent = 'Importando ' + parsed.length + ' rondas…';
+
+    // --- Paso 1: resolver cada fila contra los campos/barras ya existentes, para no duplicar. ---
+    var knownTees = tees().map(function(t){ return {course:t.course, color:t.color, cr:t.cr, sr:t.sr, par:t.par}; });
+    function findKnownTee(course, cr, sr, par){
+      for(var i=0;i<knownTees.length;i++){
+        var t = knownTees[i];
+        if(t.course===course && t.par===par && Math.abs(t.cr-cr)<=0.15 && Math.abs(t.sr-sr)<=1) return t;
+      }
+      return null;
+    }
+    var linkedCourses = {}; // nombre del CSV -> nombre ya existente al que se ha vinculado (solo si difieren)
+    var newTeesToCreate = [];
+    var resolved = parsed.map(function(r){
+      var courseResolved = findExistingCourseName(r.course) || r.course;
+      if(courseResolved !== r.course) linkedCourses[r.course] = courseResolved;
+      var existingTee = findKnownTee(courseResolved, r.cr, r.sr, r.par);
+      var teeColor;
+      if(existingTee){
+        teeColor = existingTee.color; // reutilizamos la barra ya existente, no se crea otra
+      } else {
+        teeColor = 'Amarillas'; // color por defecto cuando no sabemos cuál se jugó exactamente
+        var newTee = {course:courseResolved, color:teeColor, cr:r.cr, sr:r.sr, par:r.par};
+        knownTees.push(newTee); // para que otras filas de este mismo lote la reutilicen
+        newTeesToCreate.push(newTee);
+      }
+      return { date:r.date, course:courseResolved, tee:teeColor, cr:r.cr, sr:r.sr, par:r.par, score:r.score };
+    });
+
+    // --- Paso 2: crear solo las barras realmente nuevas, antes de insertar las rondas. ---
+    if(newTeesToCreate.length){ await StoreOps.batchAddTees(newTeesToCreate); }
+
+    var status = config().autoApprove ? 'aprobada' : 'pendiente';
+    var roundsToInsert = resolved.map(function(r){
+      var diff = round1((r.score - r.cr) * 113 / r.sr);
+      return {
+        player: pid, course: r.course, tee: r.tee, date: r.date, score: r.score,
+        hcp: 0, stableford: 0, cr: r.cr, sr: r.sr, par: r.par,
+        differential: diff, status: status, mode: 'raw'
+      };
+    });
+    // El límite de Firestore es 500 operaciones por lote — se reparte por si el CSV es enorme.
+    var CHUNK = 400;
+    for(var i=0; i<roundsToInsert.length; i+=CHUNK){
+      await StoreOps.batchAddRounds(roundsToInsert.slice(i, i+CHUNK));
+      statusEl.textContent = 'Importando ' + Math.min(i+CHUNK, roundsToInsert.length) + '/' + roundsToInsert.length + '…';
+    }
+
+    var importedForName = (function(){ var p = players().find(function(x){ return x.id===pid; }); return p?p.name:'—'; })();
+    var summary = roundsToInsert.length + ' rondas importadas' + (adminUnlocked ? ' para ' + importedForName : '') + (status==='pendiente' ? ' (pendientes de aprobación en la pestaña Admin).' : '.');
+    var linkedNames = Object.keys(linkedCourses);
+    if(linkedNames.length){
+      summary += ' ' + linkedNames.length + ' campo(s) del CSV vinculado(s) a campos ya existentes (' +
+        linkedNames.map(function(k){ return k+'→'+linkedCourses[k]; }).join(', ') + ').';
+    }
+    if(newTeesToCreate.length){
+      summary += ' ' + newTeesToCreate.length + ' barra(s) nueva(s) creada(s) como "Amarillas" (edítalas en la pestaña Campos si conoces el color real).';
+    }
+    statusEl.textContent = summary;
+    $('#importCsv').value = '';
+    render();
+  }
+  $('#importCsvBtn').addEventListener('click', function(){
+    $('#importCsvBtn').disabled = true;
+    importCsvRows().finally(function(){ $('#importCsvBtn').disabled = false; });
+  });
+
+  function renderRoundsFeed(){
+    var id = myId();
+    var admin = adminUnlocked;
+    var rs = rounds().slice().sort(cmpDateDesc);
+    var ps = players();
+    function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
+    var visible = rs.filter(function(r){ return r.status==='aprobada' || r.player===id || admin; });
+    var tbody = $('#roundsTable tbody');
+    if(visible.length===0){ tbody.innerHTML = '<tr><td colspan="9" class="empty">Todavía no hay rondas.</td></tr>'; return; }
+    tbody.innerHTML = visible.map(function(r){
+      var pill = r.status==='aprobada' ? '<span class="pill good">Aprobada</span>' : '<span class="pill warning">Pendiente</span>';
+      var canDelete = (r.player === id) || admin;
+      var delCell = canDelete ? '<button class="btn small danger" data-del-round="'+esc(r.id)+'">Borrar</button>' : '';
+      return '<tr><td>'+esc(r.date)+'</td><td>'+esc(pname(r.player))+'</td><td>'+esc(r.course)+'</td><td>'+esc(r.tee)+'</td>' +
+        roundResultCells(r) + '<td class="num">'+r.differential.toFixed(1)+'</td><td>'+pill+'</td><td>'+delCell+'</td></tr>';
+    }).join('');
+    // Confirmación en dos clics (sin diálogo nativo): el primer clic solo cambia el botón a
+    // "¿Seguro?" durante unos segundos; hay que pulsar otra vez para borrar de verdad. La ronda
+    // no se pierde: queda registrada en la papelera (pestaña Admin) antes de borrarse.
+    $all('[data-del-round]', tbody).forEach(function(btn){
+      var confirming = false, resetTimer = null;
+      btn.addEventListener('click', function(){
+        if(!confirming){
+          confirming = true;
+          btn.textContent = '¿Seguro?';
+          resetTimer = setTimeout(function(){ confirming = false; btn.textContent = 'Borrar'; }, 4000);
+          return;
+        }
+        clearTimeout(resetTimer);
+        btn.disabled = true;
+        var rid = btn.getAttribute('data-del-round');
+        var round = rounds().find(function(x){ return x.id === rid; });
+        if(!round){ render(); return; }
+        deleteRoundWithLog(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador').then(render);
+      });
+    });
+  }
+
+  function renderPlayerChip(){
+    var id = myId();
+    var p = players().find(function(x){ return x.id===id; });
+    $('#rf-player-name').textContent = p ? p.name : '(elige quién eres arriba)';
+  }
+  $('#rf-player-switch').addEventListener('click', function(){ openOnboard(true); });
+
+  // ---------- Evolución view ----------
+  var EVO_MAX_PLAYERS = 24;
+  var evoSelection = {};
+  // Estilo de línea por ciclo de color: con hasta 24 jugadores y solo 8 colores seguros,
+  // cada vuelta de 8 usa un trazo distinto (sólido / discontinuo / punteado) para distinguirlas.
+  var DASH_CYCLES = ['', '7,4', '2,3'];
+  function evoDash(idx){ return DASH_CYCLES[Math.floor(idx/8) % DASH_CYCLES.length]; }
+
+  function renderEvoList(){
+    var ps = players();
+    var box = $('#evoPlayerList');
+    box.innerHTML = ps.map(function(p,i){
+      var checked = evoSelection[p.id] ? 'checked' : '';
+      return '<label><input type="checkbox" data-evo="'+esc(p.id)+'" '+checked+'> <span style="width:9px;height:9px;border-radius:3px;background:'+catColor(i)+';display:inline-block;"></span> '+esc(p.name)+'</label>';
+    }).join('');
+    $all('[data-evo]', box).forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var selectedCount = Object.keys(evoSelection).filter(function(k){return evoSelection[k];}).length;
+        if(cb.checked && selectedCount>=EVO_MAX_PLAYERS){ cb.checked=false; return; }
+        evoSelection[cb.getAttribute('data-evo')] = cb.checked;
+        renderEvoChart();
+      });
+    });
+  }
+
+  // ---------- Filtro de intervalo de fechas (Evolución) ----------
+  var evoRange = { mode: 'all', from: null, to: null }; // mode: 'all' | '1y' | 'ytd' | 'custom'
+  function isoDateNDaysAgo(days){
+    var d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0,10);
+  }
+  function todayIso(){
+    return new Date().toISOString().slice(0,10);
+  }
+  function applyEvoRangePreset(mode){
+    evoRange.mode = mode;
+    var today = todayIso();
+    if(mode === 'all'){ evoRange.from = null; evoRange.to = null; }
+    else if(mode === '1y'){ evoRange.from = isoDateNDaysAgo(365); evoRange.to = today; }
+    else if(mode === 'ytd'){ evoRange.from = today.slice(0,4)+'-01-01'; evoRange.to = today; }
+    $('#evoFrom').value = evoRange.from || '';
+    $('#evoTo').value = evoRange.to || '';
+    renderEvoChart();
+  }
+  $all('[data-evo-range]').forEach(function(btn){
+    btn.addEventListener('click', function(){ applyEvoRangePreset(btn.getAttribute('data-evo-range')); });
+  });
+  $('#evoFrom').addEventListener('change', function(){
+    evoRange.mode = 'custom'; evoRange.from = $('#evoFrom').value || null; renderEvoChart();
+  });
+  $('#evoTo').addEventListener('change', function(){
+    evoRange.mode = 'custom'; evoRange.to = $('#evoTo').value || null; renderEvoChart();
+  });
+  // range es opcional — por defecto usa el rango de la vista Evolución (jugadores). La vista
+  // Equipos tiene su propio estado de rango (teamEvoRange, más abajo) y se lo pasa explícito.
+  function filterPointsByRange(points, range){
+    range = range || evoRange;
+    if(!range.from && !range.to) return points;
+    return points.filter(function(p){
+      if(range.from && p.x < range.from) return false;
+      if(range.to && p.x > range.to) return false;
+      return true;
+    });
+  }
+
+  // ---------- Filtro de intervalo de fechas (Equipos) — mismo patrón que Evolución de jugadores ----------
+  var teamEvoRange = { mode: 'all', from: null, to: null };
+  function applyTeamEvoRangePreset(mode){
+    teamEvoRange.mode = mode;
+    var today = todayIso();
+    if(mode === 'all'){ teamEvoRange.from = null; teamEvoRange.to = null; }
+    else if(mode === '1y'){ teamEvoRange.from = isoDateNDaysAgo(365); teamEvoRange.to = today; }
+    else if(mode === 'ytd'){ teamEvoRange.from = today.slice(0,4)+'-01-01'; teamEvoRange.to = today; }
+    $('#teamEvoFrom').value = teamEvoRange.from || '';
+    $('#teamEvoTo').value = teamEvoRange.to || '';
+    renderTeamEvoChart();
+  }
+  $all('[data-team-evo-range]').forEach(function(btn){
+    btn.addEventListener('click', function(){ applyTeamEvoRangePreset(btn.getAttribute('data-team-evo-range')); });
+  });
+  $('#teamEvoFrom').addEventListener('change', function(){
+    teamEvoRange.mode = 'custom'; teamEvoRange.from = $('#teamEvoFrom').value || null; renderTeamEvoChart();
+  });
+  $('#teamEvoTo').addEventListener('change', function(){
+    teamEvoRange.mode = 'custom'; teamEvoRange.to = $('#teamEvoTo').value || null; renderTeamEvoChart();
+  });
+
+  var MES_CORTO = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  function fmtDateShort(iso, withYear){
+    var parts = iso.split('-'); var y = parts[0], m = parts[1], d = parts[2];
+    var mon = MES_CORTO[parseInt(m,10)-1] || m;
+    return withYear ? (d+' '+mon+' '+y) : (d+' '+mon);
+  }
+  // Elige unos pocos índices repartidos a lo largo de una serie (siempre incluye el primero
+  // y el último) para marcar visualmente "algunos valores" sin llenar el gráfico de puntos —
+  // usado tanto para los marcadores fijos como base del resto de puntos "detectables" al pasar
+  // el ratón por encima (el hover detecta CUALQUIER punto real, no solo los marcados).
+  var CHART_MAX_MARKERS = 5;
+  function pickMarkerIndices(n, max){
+    if(n<=0) return [];
+    if(n<=max){ var all=[]; for(var i=0;i<n;i++) all.push(i); return all; }
+    var idx = [];
+    for(var k=0;k<max;k++){ idx.push(Math.round(k*(n-1)/(max-1))); }
+    return idx.filter(function(v,i){ return idx.indexOf(v)===i; });
+  }
+  function svgLineChart(seriesList, opts){
+    // seriesList: [{label, color, dash, points:[{x:dateStr, y:number}]}]
+    // Devuelve {html, points} — "points" son TODOS los puntos reales con su posición en
+    // pantalla (sx,sy) dentro del viewBox del SVG, para el hover: "pasar por encima y ver
+    // el valor" funciona sobre cualquier punto de la serie, no solo sobre los marcados.
+    var W = opts.width||620, H = opts.height||300, pad = {t:16,r:20,b:34,l:34};
+    var allPoints = seriesList.reduce(function(a,s){ return a.concat(s.points); }, []);
+    if(allPoints.length===0) return { html: '<p class="empty">Elige al menos un jugador con hándicap calculado en ese intervalo de fechas.</p>', points: [] };
+    var dates = allPoints.map(function(p){ return p.x; }).sort();
+    var minD = dates[0], maxD = dates[dates.length-1];
+    var ys = allPoints.map(function(p){ return p.y; });
+    var minY = Math.floor(Math.min.apply(null,ys)-1), maxY = Math.ceil(Math.max.apply(null,ys)+1);
+    if(minY===maxY){ minY-=1; maxY+=1; }
+    var t0 = new Date(minD).getTime(), t1 = new Date(maxD).getTime();
+    if(t1===t0) t1 = t0 + 86400000;
+    function X(d){ return pad.l + (new Date(d).getTime()-t0)/(t1-t0) * (W-pad.l-pad.r); }
+    function Y(v){ return pad.t + (1-(v-minY)/(maxY-minY)) * (H-pad.t-pad.b); }
+
+    var grid = '';
+    var steps = 4;
+    for(var i=0;i<=steps;i++){
+      var v = minY + (maxY-minY)*i/steps;
+      var y = Y(v);
+      grid += '<line x1="'+pad.l+'" x2="'+(W-pad.r)+'" y1="'+y+'" y2="'+y+'" stroke="var(--line)" stroke-width="1"/>';
+      grid += '<text x="'+(pad.l-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="var(--muted)">'+v.toFixed(1)+'</text>';
+    }
+
+    // Eje X: fechas — varios ticks repartidos entre la fecha mínima y máxima mostradas.
+    var xAxis = '';
+    var xSteps = Math.min(5, Math.max(2, allPoints.length));
+    var spanYears = (t1-t0) / (365*86400000);
+    for(var xi=0; xi<=xSteps; xi++){
+      var tt = t0 + (t1-t0)*xi/xSteps;
+      var iso = new Date(tt).toISOString().slice(0,10);
+      var xPos = pad.l + (W-pad.l-pad.r)*xi/xSteps;
+      xAxis += '<text x="'+xPos.toFixed(1)+'" y="'+(H-pad.b+16)+'" text-anchor="middle" font-size="10.5" fill="var(--muted)">'+fmtDateShort(iso, spanYears>=1)+'</text>';
+    }
+
+    // Con muchas series los end-labels sobre el gráfico se solapan — a partir de 4 se
+    // dejan de dibujar ahí y toda la identificación pasa a la leyenda (con fechas).
+    var showInlineLabels = seriesList.length <= 4;
+    var paths = '';
+    var markers = '';
+    var endLabels = '';
+    var hitPoints = []; // todos los puntos reales, para el hover
+    seriesList.forEach(function(s){
+      var pts = s.points.slice().sort(function(a,b){ return a.x<b.x?-1:(a.x>b.x?1:0); });
+      var d = pts.map(function(p,i){ return (i===0?'M':'L')+X(p.x).toFixed(1)+','+Y(p.y).toFixed(1); }).join(' ');
+      var dashAttr = s.dash ? ' stroke-dasharray="'+s.dash+'"' : '';
+      paths += '<path d="'+d+'" fill="none" stroke="'+s.color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"'+dashAttr+'/>';
+
+      // Marcadores fijos: unos pocos puntos "de referencia" pequeños a lo largo de la línea
+      // (siempre el primero y el último), para que se vea algo de estructura sin saturar.
+      var markIdx = pickMarkerIndices(pts.length, CHART_MAX_MARKERS);
+      markIdx.forEach(function(idx){
+        var p = pts[idx];
+        var r = (idx===pts.length-1) ? 4.5 : 3;
+        markers += '<circle class="chart-marker" cx="'+X(p.x).toFixed(1)+'" cy="'+Y(p.y).toFixed(1)+'" r="'+r+'" fill="'+s.color+'" stroke="var(--plane)" stroke-width="1.5"><title>'+esc(s.label)+' — '+fmtDateShort(p.x,true)+': '+p.y.toFixed(1)+'</title></circle>';
+      });
+
+      pts.forEach(function(p){
+        hitPoints.push({ sx: X(p.x), sy: Y(p.y), x: p.x, y: p.y, label: s.label, color: s.color });
+      });
+
+      var last = pts[pts.length-1];
+      if(showInlineLabels){
+        endLabels += '<text x="'+(X(last.x)+7).toFixed(1)+'" y="'+(Y(last.y)+4).toFixed(1)+'" font-size="11" fill="var(--ink-2)">'+esc(s.label)+' '+last.y.toFixed(1)+'</text>';
+      }
+    });
+
+    var html = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" width="100%" style="max-width:'+W+'px;height:auto;">'+
+      grid + xAxis + paths + markers + endLabels +
+      '<line x1="'+pad.l+'" x2="'+(W-pad.r)+'" y1="'+(H-pad.b)+'" y2="'+(H-pad.b)+'" stroke="var(--line-strong)"/>' +
+      '<line class="hover-line" x1="0" x2="0" y1="'+pad.t+'" y2="'+(H-pad.b)+'"/>' +
+      '<circle class="hover-dot" r="6" fill="none" stroke="var(--ink)" stroke-width="2"/>' +
+      '</svg>';
+    return { html: html, points: hitPoints };
+  }
+
+  // Engancha el hover "pasar por encima y ver el valor" sobre un gráfico ya insertado en el
+  // DOM: mueve una línea vertical + un aro sobre el punto más cercano al ratón y actualiza el
+  // texto de un tooltip flotante. Los listeners van en el propio <svg> (que se recrea entero en
+  // cada render) para no ir acumulando listeners sobre el div contenedor, que persiste entre
+  // renders.
+  function attachChartHover(container, points, opts){
+    // opts.multi = true: en vez de mostrar solo el punto más cercano (una serie), el tooltip
+    // lista el valor de TODAS las series a la fecha señalada (p.ej. la comparativa de equipos,
+    // donde interesa ver a la vez el HCP medio de cada equipo involucrado en ese momento).
+    opts = opts || {};
+    var svg = container.querySelector('svg.chart');
+    var tip = container.querySelector('.tooltip-box');
+    if(!svg || !tip || !points.length) return;
+    var crosshair = svg.querySelector('.hover-line');
+    var dot = svg.querySelector('.hover-dot');
+    var seriesGroups = null;
+    if(opts.multi){
+      seriesGroups = {};
+      points.forEach(function(p){
+        (seriesGroups[p.label] = seriesGroups[p.label] || []).push(p);
+      });
+    }
+    function toSvgPoint(evt){
+      var pt = svg.createSVGPoint();
+      pt.x = evt.clientX; pt.y = evt.clientY;
+      var m = svg.getScreenCTM();
+      return m ? pt.matrixTransform(m.inverse()) : null;
+    }
+    function nearest(sx, sy){
+      var best = null, bestDist = Infinity;
+      for(var i=0;i<points.length;i++){
+        var p = points[i];
+        var dist = Math.hypot(p.sx-sx, p.sy-sy);
+        if(dist<bestDist){ bestDist=dist; best=p; }
+      }
+      return best;
+    }
+    // Punto más cercano de una serie concreta SOLO por posición horizontal (fecha) — para el
+    // modo "multi", donde lo que importa es "el valor de este equipo hacia esa fecha", no cuál
+    // de sus puntos cae visualmente más cerca del cursor en vertical.
+    function nearestInSeriesByX(arr, sx){
+      var best = null, bestDist = Infinity;
+      for(var i=0;i<arr.length;i++){
+        var dist = Math.abs(arr[i].sx-sx);
+        if(dist<bestDist){ bestDist=dist; best=arr[i]; }
+      }
+      return best;
+    }
+    function showAt(sx, sy, clientX, clientY){
+      var p = nearest(sx, sy);
+      if(!p) return;
+      crosshair.setAttribute('x1', p.sx); crosshair.setAttribute('x2', p.sx);
+      crosshair.style.display = 'block';
+      if(opts.multi){
+        dot.style.display = 'none';
+        var rows = Object.keys(seriesGroups).map(function(label){
+          return nearestInSeriesByX(seriesGroups[label], p.sx);
+        }).filter(Boolean).sort(function(a,b){ return a.y-b.y; });
+        tip.innerHTML = '<strong>'+esc(fmtDateShort(p.x,true))+'</strong>' + rows.map(function(r){
+          return '<div class="tt-row"><span class="tt-sw" style="background:'+r.color+'"></span>'+esc(r.label)+
+            '<span class="tt-val">'+r.y.toFixed(1)+'</span></div>';
+        }).join('');
+      } else {
+        dot.setAttribute('cx', p.sx); dot.setAttribute('cy', p.sy); dot.setAttribute('stroke', p.color);
+        dot.style.display = 'block';
+        tip.innerHTML = '<strong>'+esc(p.label)+'</strong>'+fmtDateShort(p.x,true)+' · <span class="tt-val">'+p.y.toFixed(1)+'</span>';
+      }
+      tip.style.display = 'block';
+      var rect = container.getBoundingClientRect();
+      var left = clientX - rect.left + 14;
+      var top = clientY - rect.top - 14;
+      if(left > rect.width - 150) left = clientX - rect.left - 150;
+      if(top < 0) top = clientY - rect.top + 14;
+      tip.style.left = left+'px';
+      tip.style.top = top+'px';
+    }
+    function hide(){
+      crosshair.style.display = 'none';
+      dot.style.display = 'none';
+      tip.style.display = 'none';
+    }
+    // Pointer Events cubren a la vez ratón (hover normal) y dedo en móvil/tablet (tocar y/o
+    // arrastrar) con el mismo código — antes solo había mousemove/mouseleave, que en touch no
+    // disparan nada, así que en el móvil el hover no funcionaba en absoluto. pointerdown se
+    // escucha también (no solo pointermove) para que un simple toque, sin arrastrar, ya muestre
+    // el valor en ese punto — imprescindible en touch, donde no existe un "hover" previo al toque.
+    function onPointer(evt){
+      var sp = toSvgPoint(evt);
+      if(!sp) return;
+      showAt(sp.x, sp.y, evt.clientX, evt.clientY);
+    }
+    svg.addEventListener('pointerdown', onPointer);
+    svg.addEventListener('pointermove', onPointer);
+    svg.addEventListener('pointerleave', hide);
+    svg.addEventListener('pointerup', hide);
+    svg.addEventListener('pointercancel', hide);
+  }
+
+  function renderEvoChart(){
+    var ps = players();
+    var ids = Object.keys(evoSelection).filter(function(k){ return evoSelection[k]; });
+    var series = ids.map(function(id){
+      var idx = ps.findIndex(function(p){return p.id===id;});
+      var p = ps[idx];
+      var pts = filterPointsByRange(hciSeriesFor(id).map(function(s){ return {x:s.date, y:s.hci}; }));
+      return { label: p?p.name:'?', color: catColor(idx<0?0:idx), dash: evoDash(idx<0?0:idx), points: pts };
+    }).filter(function(s){ return s.points.length>0; });
+    var chart = $('#evoChart');
+    var result = svgLineChart(series, {});
+    var html = result.html;
+    if(series.length>1){
+      html += '<div class="legend">'+series.map(function(s){
+        var pts = s.points;
+        var first = pts[0], last = pts[pts.length-1];
+        var range = pts.length>1
+          ? (fmtDateShort(first.x, true)+' → '+fmtDateShort(last.x, true))
+          : fmtDateShort(first.x, true);
+        return '<span class="lk"><span class="sw" style="background:'+s.color+'"></span>'+esc(s.label)+
+          ' <span style="color:var(--muted);font-size:11.5px;">('+range+', '+last.y.toFixed(1)+')</span></span>';
+      }).join('')+'</div>';
+    }
+    chart.innerHTML = html + '<div class="tooltip-box"></div>';
+    attachChartHover(chart, result.points);
+  }
+
+  // ---------- Equipos view ----------
+  $('#teamForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var name = $('#tf-name').value.trim();
+    if(!name) return;
+    var id = 'tm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,5);
+    StoreOps.setTeam(id, { name: name }).then(function(){
+      $('#tf-name').value = '';
+      render();
+    });
+  });
+
+  function renderTeamAssign(){
+    var ps = players(), tms = teams();
+    var tbody = $('#teamAssignTable tbody');
+    var note = $('#teamAssignNote');
+    note.textContent = adminUnlocked
+      ? 'Estás como admin: puedes reasignar a cualquiera.'
+      : 'Solo el admin puede cambiar la columna Equipo. Entra con el PIN en la pestaña Admin si te toca a ti.';
+    if(ps.length===0){ tbody.innerHTML = '<tr><td colspan="2" class="empty">Todavía no hay jugadores.</td></tr>'; return; }
+    if(!adminUnlocked){
+      tbody.innerHTML = ps.map(function(p){
+        var t = tms.find(function(x){return x.id===p.team;});
+        return '<tr><td>'+esc(p.name)+'</td><td>'+(t?esc(t.name):'<span class="empty" style="padding:0;">Sin equipo</span>')+'</td></tr>';
+      }).join('');
+      return;
+    }
+    tbody.innerHTML = ps.map(function(p){
+      var opts = '<option value="">Sin equipo</option>' + tms.map(function(t){
+        return '<option value="'+esc(t.id)+'" '+(p.team===t.id?'selected':'')+'>'+esc(t.name)+'</option>';
+      }).join('');
+      return '<tr><td>'+esc(p.name)+'</td><td><select data-assign="'+esc(p.id)+'">'+opts+'</select></td></tr>';
+    }).join('');
+    $all('[data-assign]', tbody).forEach(function(sel){
+      sel.addEventListener('change', function(){
+        var pid = sel.getAttribute('data-assign');
+        StoreOps.setPlayer(pid, { team: sel.value }).then(render);
+      });
+    });
+  }
+
+  // ---------- Comparar equipos: evolución en el tiempo (mismo patrón que Evolución de jugadores) ----------
+  var TEAM_EVO_MAX = 24;
+  var teamEvoSelection = {};
+  function renderTeamEvoList(){
+    var tms = teams();
+    var box = $('#teamEvoList');
+    if(tms.length===0){ box.innerHTML = '<p class="empty">Crea al menos un equipo.</p>'; return; }
+    box.innerHTML = tms.map(function(t,i){
+      var checked = teamEvoSelection[t.id] ? 'checked' : '';
+      var members = players().filter(function(p){ return p.team===t.id; }).length;
+      return '<label><input type="checkbox" data-team-evo="'+esc(t.id)+'" '+checked+'> <span style="width:9px;height:9px;border-radius:3px;background:'+catColor(i)+';display:inline-block;"></span> '+esc(t.name)+' ('+members+')</label>';
+    }).join('');
+    $all('[data-team-evo]', box).forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var selectedCount = Object.keys(teamEvoSelection).filter(function(k){return teamEvoSelection[k];}).length;
+        if(cb.checked && selectedCount>=TEAM_EVO_MAX){ cb.checked=false; return; }
+        teamEvoSelection[cb.getAttribute('data-team-evo')] = cb.checked;
+        renderTeamEvoChart();
+      });
+    });
+  }
+  function renderTeamEvoChart(){
+    var tms = teams();
+    var ids = Object.keys(teamEvoSelection).filter(function(k){ return teamEvoSelection[k]; });
+    var series = ids.map(function(id){
+      var idx = tms.findIndex(function(t){return t.id===id;});
+      var t = tms[idx];
+      var pts = filterPointsByRange(teamHciSeriesFor(id).map(function(s){ return {x:s.date, y:s.hci}; }), teamEvoRange);
+      return { label: t?t.name:'?', color: catColor(idx<0?0:idx), dash: evoDash(idx<0?0:idx), points: pts };
+    }).filter(function(s){ return s.points.length>0; });
+    var chart = $('#teamEvoChart');
+    var result = svgLineChart(series, {});
+    var html = result.html;
+    if(series.length>1){
+      html += '<div class="legend">'+series.map(function(s){
+        var pts = s.points;
+        var first = pts[0], last = pts[pts.length-1];
+        var range = pts.length>1
+          ? (fmtDateShort(first.x, true)+' → '+fmtDateShort(last.x, true))
+          : fmtDateShort(first.x, true);
+        return '<span class="lk"><span class="sw" style="background:'+s.color+'"></span>'+esc(s.label)+
+          ' <span style="color:var(--muted);font-size:11.5px;">('+range+', '+last.y.toFixed(1)+')</span></span>';
+      }).join('')+'</div>';
+    }
+    chart.innerHTML = html + '<div class="tooltip-box"></div>';
+    attachChartHover(chart, result.points, {multi:true});
+  }
+
+  // ---------- Campos view ----------
+  var cfTeeCount = 0;
+  var TEE_COLORS = ["Negras","Azules","Blancas","Amarillas","Verdes","Doradas","Rojas","Rosas"];
+  function addTeeFormRow(){
+    cfTeeCount++;
+    var wrap = document.createElement('div');
+    wrap.className = 'tee-row-form';
+    var colorOpts = '<option value="">Sin elegir</option>' +
+      TEE_COLORS.map(function(c){ return '<option value="'+c+'">'+c+'</option>'; }).join('') +
+      '<option value="__other">Otra…</option>';
+    wrap.innerHTML =
+      '<div class="field" style="margin:0;"><label>Barra (opcional)</label><select data-tee-color>'+colorOpts+'</select>' +
+        '<input type="text" data-tee-color-other placeholder="Nombre de la barra" hidden style="margin-top:6px;"></div>' +
+      '<div class="field" style="margin:0;"><label>CR</label><input type="number" step="0.1" data-tee-cr></div>' +
+      '<div class="field" style="margin:0;"><label>Slope</label><input type="number" step="1" data-tee-sr></div>' +
+      '<div class="field" style="margin:0;"><label>Par</label><input type="number" step="1" data-tee-par></div>' +
+      '<button type="button" class="btn small danger" data-remove-tee>✕</button>';
+    wrap.querySelector('[data-remove-tee]').addEventListener('click', function(){ wrap.remove(); });
+    var colorSel = wrap.querySelector('[data-tee-color]');
+    var otherInput = wrap.querySelector('[data-tee-color-other]');
+    colorSel.addEventListener('change', function(){ otherInput.hidden = colorSel.value !== '__other'; });
+    $('#cf-tees').appendChild(wrap);
+  }
+  function teeRowColor(row){
+    var sel = row.querySelector('[data-tee-color]').value;
+    if(sel === '__other') return row.querySelector('[data-tee-color-other]').value.trim();
+    return sel;
+  }
+  $('#cf-add-tee').addEventListener('click', addTeeFormRow);
+  addTeeFormRow();
+
+  var cfPending = null; // {name, match, valid} — a la espera de que el usuario confirme si es el mismo campo
+  function cfHideWarning(){
+    $('#cf-dupe-warning').style.display = 'none';
+    $('#cf-dupe-warning').innerHTML = '';
+    $('#cf-submit-btn').disabled = false;
+    cfPending = null;
+  }
+  function cfCreateCourse(name, valid){
+    var toCreate = [];
+    var reusedTees = 0;
+    valid.forEach(function(t){
+      var existing = findMatchingTee(name, t.cr, t.sr, t.par);
+      if(existing){ reusedTees++; return; } // ya hay una barra prácticamente igual — no duplicar
+      toCreate.push({ course: name, color: t.color, cr: t.cr, sr: t.sr, par: t.par });
+    });
+    var writePromise = toCreate.length ? StoreOps.batchAddTees(toCreate) : Promise.resolve();
+    writePromise.then(function(){
+      $('#cf-name').value = '';
+      $('#cf-tees').innerHTML = ''; cfTeeCount = 0; addTeeFormRow();
+      cfHideWarning();
+      render();
+      if(reusedTees > 0){
+        var note = toCreate.length + ' barra(s) nueva(s) añadida(s) a "'+name+'". '+reusedTees+' barra(s) no se añadieron porque ya existía una prácticamente igual (mismo par y CR/slope muy próximos).';
+        $('#camposCount').textContent = note + ' — ' + courseNames().length + ' campos, ' + tees().length + ' barras';
+      }
+    });
+  }
+  $('#courseForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var name = $('#cf-name').value.trim();
+    if(!name) return;
+    var teeRows = $all('.tee-row-form', $('#cf-tees'));
+    var valid = [];
+    teeRows.forEach(function(row){
+      var color = teeRowColor(row);
+      var cr = parseFloat(row.querySelector('[data-tee-cr]').value);
+      var sr = parseFloat(row.querySelector('[data-tee-sr]').value);
+      var par = parseInt(row.querySelector('[data-tee-par]').value, 10);
+      if(color && !isNaN(cr) && !isNaN(sr) && !isNaN(par)) valid.push({color,cr,sr,par});
+    });
+    if(valid.length===0) return;
+
+    var match = findExistingCourseName(name);
+    if(!match || match === name){
+      cfCreateCourse(name, valid);
+      return;
+    }
+    // Nombre distinto pero probablemente el mismo club — pedimos confirmación antes de crear un campo duplicado.
+    cfPending = { name: name, match: match, valid: valid };
+    $('#cf-submit-btn').disabled = true;
+    var box = $('#cf-dupe-warning');
+    box.style.display = 'block';
+    box.innerHTML = 'Ya existe un campo parecido: <strong>'+esc(match)+'</strong>. ¿Es el mismo club? ' +
+      '<div class="row" style="gap:8px;margin-top:8px;">' +
+      '<button type="button" class="btn small primary" id="cf-dupe-use">Sí, usar "'+esc(match)+'"</button>' +
+      '<button type="button" class="btn small" id="cf-dupe-new">No, es un campo distinto</button>' +
+      '</div>';
+    $('#cf-dupe-use').addEventListener('click', function(){
+      if(!cfPending) return;
+      cfCreateCourse(cfPending.match, cfPending.valid);
+    });
+    $('#cf-dupe-new').addEventListener('click', function(){
+      if(!cfPending) return;
+      cfCreateCourse(cfPending.name, cfPending.valid);
+    });
+  });
+
+  function renderCoursesTable(){
+    var ts = tees();
+    var tbody = $('#coursesTable tbody');
+    $('#camposCount').textContent = courseNames().length + ' campos, ' + ts.length + ' barras';
+    if(ts.length===0){ tbody.innerHTML = '<tr><td colspan="6" class="empty">Todavía no hay campos.</td></tr>'; return; }
+    var byCourse = {};
+    ts.forEach(function(t){ (byCourse[t.course]=byCourse[t.course]||[]).push(t); });
+    var out = '';
+    Object.keys(byCourse).sort().forEach(function(cName){
+      byCourse[cName].forEach(function(t,i){
+        out += '<tr><td>'+(i===0?esc(cName):'')+'</td><td>'+esc(t.color)+'</td><td class="num">'+t.par+'</td><td class="num">'+t.cr+'</td><td class="num">'+t.sr+'</td><td></td></tr>';
+      });
+    });
+    tbody.innerHTML = out;
+  }
+
+  // ---------- Admin view ----------
+  var adminUnlocked = false;
+  $('#pinForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var val = $('#pinInput').value;
+    if(val === config().pin){
+      adminUnlocked = true;
+      try{ sessionStorage.setItem('hcpApp:admin','1'); }catch(err){}
+      $('#adminLocked').hidden = true;
+      $('#adminUnlocked').hidden = false;
+      $('#pinError').style.display='none';
+      render();
+    } else {
+      $('#pinError').style.display='block';
+    }
+  });
+  try{ if(sessionStorage.getItem('hcpApp:admin')==='1') adminUnlocked = true; }catch(e){}
+  $('#approveAllBtn').addEventListener('click', function(){
+    var ids = rounds().filter(function(r){ return r.status==='pendiente'; }).map(function(r){ return r.id; });
+    if(ids.length===0) return;
+    StoreOps.batchApproveRounds(ids).then(render);
+  });
+
+  function renderAdmin(){
+    if(!adminUnlocked){ $('#adminLocked').hidden=false; $('#adminUnlocked').hidden=true; return; }
+    $('#adminLocked').hidden = true; $('#adminUnlocked').hidden = false;
+    $('#autoApproveToggle').checked = config().autoApprove;
+
+    var ps = players();
+    function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
+    var pending = rounds().filter(function(r){ return r.status==='pendiente'; }).sort(cmpDateDesc);
+    var tbody = $('#pendingTable tbody');
+    if(pending.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No hay rondas pendientes.</td></tr>'; }
+    else {
+      tbody.innerHTML = pending.map(function(r){
+        return '<tr><td>'+esc(r.date)+'</td><td>'+esc(pname(r.player))+'</td><td>'+esc(r.course)+' ('+esc(r.tee)+')</td><td class="num">'+r.differential.toFixed(1)+'</td>' +
+          '<td><button class="btn small primary" data-approve="'+esc(r.id)+'">Aprobar</button> <button class="btn small danger" data-reject="'+esc(r.id)+'">Rechazar</button></td></tr>';
+      }).join('');
+      $all('[data-approve]', tbody).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          StoreOps.updateRound(btn.getAttribute('data-approve'), { status: 'aprobada' }).then(render);
+        });
+      });
+      $all('[data-reject]', tbody).forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var rid = btn.getAttribute('data-reject');
+          var round = rounds().find(function(x){ return x.id === rid; });
+          if(!round){ render(); return; }
+          deleteRoundWithLog(round, 'rechazada por admin').then(render);
+        });
+      });
+    }
+
+    var dupePairs = findPossibleDuplicateCoursePairs();
+    var dupeBox = $('#adminDupeHint');
+    if(dupePairs.length===0){
+      dupeBox.innerHTML = '';
+    } else {
+      dupeBox.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;line-height:1.6;">' +
+        '<strong>Posibles duplicados</strong> (nombres parecidos, revisa si son el mismo club antes de borrar uno):<br>' +
+        dupePairs.map(function(p){ return '· '+esc(p[0])+' ↔ '+esc(p[1]); }).join('<br>') +
+        '</div>';
+    }
+
+    var cTbody = $('#adminCoursesTable tbody');
+    var names = courseNames();
+    cTbody.innerHTML = names.map(function(n){
+      return '<tr><td>'+esc(n)+'</td><td><button class="btn small danger" data-del-course="'+esc(n)+'">Eliminar</button></td></tr>';
+    }).join('') || '<tr><td colspan="2" class="empty">Sin campos.</td></tr>';
+    $all('[data-del-course]', cTbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var name = btn.getAttribute('data-del-course');
+        var ids = tees().filter(function(t){return t.course===name;}).map(function(t){ return t.id; });
+        StoreOps.batchDeleteTees(ids).then(render);
+      });
+    });
+
+    renderTrash();
+  }
+
+  // ---------- Papelera: rondas borradas (por su propio jugador, o por el admin) ----------
+  function renderTrash(){
+    var trashTbody = $('#trashTable tbody');
+    if(!trashTbody) return;
+    var entries = deletedRounds().slice().sort(function(a,b){
+      return (a.deletedAt < b.deletedAt) ? 1 : (a.deletedAt > b.deletedAt ? -1 : 0);
+    });
+    if(entries.length===0){
+      trashTbody.innerHTML = '<tr><td colspan="7" class="empty">Todavía no se ha borrado ninguna ronda.</td></tr>';
+      return;
+    }
+    trashTbody.innerHTML = entries.map(function(e){
+      var quien = esc(e.deletedByPlayerName || '—') + (e.deletedAsAdmin ? ' <span class="pill warning">admin</span>' : '');
+      var cuando = e.deletedAt ? esc(e.deletedAt.slice(0,16).replace('T',' ')) : '—';
+      var diff = (typeof e.differential === 'number') ? e.differential.toFixed(1) : (e.differential || '—');
+      return '<tr><td>'+esc(e.date||'—')+'</td><td>'+esc(e.playerName||'—')+'</td><td>'+esc(e.course||'—')+' ('+esc(e.tee||'—')+')</td>' +
+        '<td class="num">'+diff+'</td><td>'+quien+'</td><td>'+cuando+'</td>' +
+        '<td><button class="btn small" data-restore-round="'+esc(e.id)+'">Restaurar</button></td></tr>';
+    }).join('');
+    $all('[data-restore-round]', trashTbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        btn.disabled = true;
+        var eid = btn.getAttribute('data-restore-round');
+        var entry = deletedRounds().find(function(x){ return x.id === eid; });
+        if(!entry){ render(); return; }
+        var restored = {
+          player: entry.player, course: entry.course, tee: entry.tee, date: entry.date,
+          score: entry.score, hcp: entry.hcp, stableford: entry.stableford,
+          cr: entry.cr, sr: entry.sr, par: entry.par,
+          differential: entry.differential, status: entry.status, mode: entry.mode || 'sf'
+        };
+        StoreOps.addRound(restored)
+          .then(function(){ return StoreOps.deleteTrashEntry(entry.id); })
+          .then(render);
+      });
+    });
+  }
+  $('#autoApproveToggle').addEventListener('change', function(){
+    StoreOps.setConfig({ autoApprove: $('#autoApproveToggle').checked }).then(render);
+  });
+  $('#savePinBtn').addEventListener('click', function(){
+    var v = $('#newPinInput').value.trim();
+    if(!v) return;
+    StoreOps.setConfig({ pin: v }).then(function(){ $('#newPinInput').value=''; render(); });
+  });
+
+  // ---------- estado de conexión ----------
+  window.addEventListener('offline', function(){
+    $('#syncBanner').hidden = false;
+    $('#syncBanner').textContent = 'Sin conexión: los cambios no se pueden guardar hasta que vuelvas a tener internet.';
+  });
+  window.addEventListener('online', function(){ $('#syncBanner').hidden = true; });
+  if(!navigator.onLine){
+    $('#syncBanner').hidden = false;
+    $('#syncBanner').textContent = 'Sin conexión: los cambios no se pueden guardar hasta que vuelvas a tener internet.';
+  }
+
+  // ---------- master render ----------
+  function render(){
+    renderWhoAmI();
+    renderPlayerChip();
+    // El combobox de campo lee courseNames() al vuelo cada vez que se abre — no hace falta
+    // "repoblarlo" en cada render como antes con el <select> plano.
+    populateTeeSelect($('#rf-course').value);
+    updateSuggestedHcp();
+    renderRanking();
+    renderRoundsFeed();
+    renderEvoList();
+    renderEvoChart();
+    renderTeamAssign();
+    renderTeamEvoList();
+    renderTeamEvoChart();
+    renderCoursesTable();
+    renderAdmin();
+    renderImportAsSelector();
+  }
+  onStoreChange = render;
+
+  document.addEventListener('DOMContentLoaded', function(){
+    var savedTab = 'ranking';
+    try{ savedTab = sessionStorage.getItem('hcpApp:tab') || 'ranking'; }catch(e){}
+    showView(savedTab);
+    if(!$('#rf-date').value){ $('#rf-date').value = new Date().toISOString().slice(0,10); }
+    render();
+    if(!myId() || !players().some(function(p){return p.id===myId();})){ openOnboard(); }
+  });
+</script>
+</body>
+</html>

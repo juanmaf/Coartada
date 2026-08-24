@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Reglas de seguridad para la Liga de Hándicap.
+//
+// Igual que el PIN de administrador dentro de la app (visible en el código, no es una
+// autenticación real), este proyecto no usa cuentas de usuario ni Firebase Authentication:
+// es una app "de honor" para un grupo cerrado de amigos que comparten el enlace. Por eso
+// estas reglas permiten lectura y escritura a cualquiera que tenga la URL de la base de
+// datos (que nadie fuera del grupo debería tener). No sustituyen un control de acceso real;
+// si en el futuro quieres reforzarlo, habría que añadir Firebase Authentication y reglas
+// basadas en el usuario autenticado.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
