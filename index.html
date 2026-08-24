@@ -415,6 +415,7 @@
               <button class="btn primary" id="importCsvBtn" type="button">Importar</button>
               <span id="importStatus" style="font-size:13px;color:var(--muted);"></span>
             </div>
+            <div id="importSuspiciousReview" hidden style="margin-top:14px;"></div>
           </details>
         </div>
 
@@ -619,6 +620,17 @@
 
           <div class="card">
             <div class="section-head">
+              <div><h2>Rondas sospechosas</h2><p>Diferencial por debajo de -8 o por encima de 50 — normalmente indica un dato mal metido (p. ej. 9 hoyos comparados con la valoración de 18), no una ronda real así de buena o mala.</p></div>
+            </div>
+            <div id="suspiciousHint" style="margin-bottom:10px;"></div>
+            <div class="table-wrap"><table class="data" id="suspiciousTable">
+              <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th class="num">Diferencial</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
               <div><h2>Papelera (rondas borradas)</h2><p>Registro de todas las rondas eliminadas por cualquier jugador o por el admin — no se pierden, quedan aquí para consultarlas o restaurarlas.</p></div>
             </div>
             <div class="table-wrap"><table class="data" id="trashTable">
@@ -738,8 +750,10 @@
     },
     batchAddRounds: function(list){
       var b = writeBatch(db);
-      list.forEach(function(r){ b.set(doc(collection(db,'rounds')), r); });
-      return b.commit();
+      // doc(collection(...)) genera el id en el cliente antes de escribir, así que podemos
+      // devolver la lista de ids ya emparejada con `list` sin esperar una segunda consulta.
+      var refs = list.map(function(r){ var ref = doc(collection(db,'rounds')); b.set(ref, r); return ref; });
+      return b.commit().then(function(){ return refs.map(function(ref){ return ref.id; }); });
     },
     batchApproveRounds: function(ids){
       var b = writeBatch(db);
@@ -759,6 +773,17 @@
   var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var round1 = function(x){ return Math.round(x*10)/10; };
   function catColor(idx){ return "var(--s"+((idx%8)+1)+")"; }
+
+  // Umbral de "ronda sospechosa": un diferencial así de extremo casi siempre viene de un dato
+  // mal metido (el caso real que lo motivó: 9 hoyos jugados pero comparados con la valoración
+  // de 18 hoyos del campo, ver decisiones del proyecto) y no de una ronda genuina buenísima o
+  // pésima. `dismissedSuspicious` permite al admin marcar una como "revisada, es real" y que
+  // deje de aparecer, sin tener que cambiarle ningún otro dato.
+  var SUSPICIOUS_DIFF_LOW = -8, SUSPICIOUS_DIFF_HIGH = 50;
+  function isSuspiciousRound(r){
+    return !r.dismissedSuspicious && typeof r.differential === 'number' &&
+      (r.differential < SUSPICIOUS_DIFF_LOW || r.differential > SUSPICIOUS_DIFF_HIGH);
+  }
 
   var LS_KEY = "hcpApp:playerId";
 
@@ -896,7 +921,8 @@
         date: r.date, stableford: parseFloat(r.stableford), hcp: parseFloat(r.hcp),
         cr: parseFloat(r.cr), sr: parseFloat(r.sr), par: parseFloat(r.par),
         differential: parseFloat(r.differential), status: r.status,
-        mode: r.mode || 'sf', score: (r.score!=null) ? parseFloat(r.score) : null
+        mode: r.mode || 'sf', score: (r.score!=null) ? parseFloat(r.score) : null,
+        dismissedSuspicious: r.dismissedSuspicious === true
       };
     });
   }
@@ -1481,8 +1507,11 @@
     });
     // El límite de Firestore es 500 operaciones por lote — se reparte por si el CSV es enorme.
     var CHUNK = 400;
+    var insertedWithIds = [];
     for(var i=0; i<roundsToInsert.length; i+=CHUNK){
-      await StoreOps.batchAddRounds(roundsToInsert.slice(i, i+CHUNK));
+      var slice = roundsToInsert.slice(i, i+CHUNK);
+      var ids = await StoreOps.batchAddRounds(slice);
+      slice.forEach(function(r, idx){ insertedWithIds.push(Object.assign({id: ids[idx]}, r)); });
       statusEl.textContent = 'Importando ' + Math.min(i+CHUNK, roundsToInsert.length) + '/' + roundsToInsert.length + '…';
     }
 
@@ -1496,9 +1525,85 @@
     if(newTeesToCreate.length){
       summary += ' ' + newTeesToCreate.length + ' barra(s) nueva(s) creada(s) como "Amarillas" (edítalas en la pestaña Campos si conoces el color real).';
     }
+    var suspicious = insertedWithIds.filter(isSuspiciousRound);
+    if(suspicious.length){
+      summary += ' ⚠ ' + suspicious.length + ' ronda(s) con un diferencial muy fuera de lo normal — revísalas abajo.';
+    }
     statusEl.textContent = summary;
     $('#importCsv').value = '';
+    renderImportSuspiciousReview(suspicious, importedForName);
     render();
+  }
+
+  // ---------- Revisión de rondas sospechosas tras importar CSV ----------
+  // `list` son las rondas recién insertadas (con id) cuyo diferencial cae fuera del rango
+  // razonable (ver SUSPICIOUS_DIFF_LOW/HIGH). Se muestran justo debajo del importador para
+  // poder corregirlas o borrarlas sin tener que ir a buscarlas a la pestaña Rondas.
+  function renderImportSuspiciousReview(list, ownerName){
+    var box = $('#importSuspiciousReview');
+    if(!list || list.length===0){ box.hidden = true; box.innerHTML=''; return; }
+    box.hidden = false;
+    box.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;line-height:1.6;margin-bottom:10px;">' +
+      '<strong>Rondas sospechosas de ' + esc(ownerName) + '</strong> — diferencial muy por debajo de -8 o por encima de 50, ' +
+      'normalmente señal de un dato mal metido (por ejemplo, 9 hoyos comparados con la valoración de 18 del campo). ' +
+      'Corrige el score, bórrala, o marca "No es un error" si de verdad jugó así.</div>' +
+      '<div class="table-wrap"><table class="data"><thead><tr><th>Fecha</th><th>Campo</th><th class="num">Score</th><th class="num">Diferencial</th><th></th></tr></thead><tbody>' +
+      list.map(function(r){
+        return '<tr data-review-row="'+esc(r.id)+'">' +
+          '<td>'+esc(r.date)+'</td><td>'+esc(r.course)+' ('+esc(r.tee)+')</td>' +
+          '<td class="num"><input type="number" data-review-score="'+esc(r.id)+'" value="'+esc(r.score)+'" style="width:70px;"></td>' +
+          '<td class="num" data-review-diff="'+esc(r.id)+'">'+r.differential.toFixed(1)+'</td>' +
+          '<td style="white-space:nowrap;">' +
+            '<button class="btn small primary" data-review-save="'+esc(r.id)+'">Guardar</button> ' +
+            '<button class="btn small danger" data-review-delete="'+esc(r.id)+'">Borrar</button> ' +
+            '<button class="btn small" data-review-dismiss="'+esc(r.id)+'">No es un error</button>' +
+          '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+
+    function removeRow(id){
+      var row = box.querySelector('[data-review-row="'+id+'"]');
+      if(row) row.parentNode.removeChild(row);
+      if(!box.querySelector('[data-review-row]')){ box.hidden = true; box.innerHTML = ''; }
+    }
+    $all('[data-review-save]', box).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-review-save');
+        var r = list.find(function(x){ return x.id===id; });
+        var input = box.querySelector('[data-review-score="'+id+'"]');
+        var newScore = parseInt(input.value, 10);
+        if(!r || isNaN(newScore)) return;
+        var newDiff = round1((newScore - r.cr) * 113 / r.sr);
+        btn.disabled = true;
+        StoreOps.updateRound(id, { score: newScore, differential: newDiff }).then(function(){
+          removeRow(id);
+          render();
+        });
+      });
+    });
+    $all('[data-review-delete]', box).forEach(function(btn){
+      var confirming = false;
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-review-delete');
+        if(!confirming){ confirming = true; btn.textContent = '¿Seguro?'; setTimeout(function(){ confirming=false; btn.textContent='Borrar'; }, 3000); return; }
+        var r = list.find(function(x){ return x.id===id; });
+        if(!r) return;
+        btn.disabled = true;
+        deleteRoundWithLog(r, 'borrada al revisar aviso de ronda sospechosa').then(function(){
+          removeRow(id);
+          render();
+        });
+      });
+    });
+    $all('[data-review-dismiss]', box).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-review-dismiss');
+        btn.disabled = true;
+        StoreOps.updateRound(id, { dismissedSuspicious: true }).then(function(){
+          removeRow(id);
+          render();
+        });
+      });
+    });
   }
   $('#importCsvBtn').addEventListener('click', function(){
     $('#importCsvBtn').disabled = true;
@@ -2293,7 +2398,45 @@
       });
     });
 
+    renderSuspiciousRounds();
     renderTrash();
+  }
+
+  // ---------- Rondas sospechosas: indicador persistente para el admin (no solo tras importar) ----------
+  function renderSuspiciousRounds(){
+    var tbody = $('#suspiciousTable tbody');
+    var hint = $('#suspiciousHint');
+    if(!tbody) return;
+    var ps = players();
+    function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
+    var list = rounds().filter(isSuspiciousRound).sort(cmpDateDesc);
+    if(list.length===0){
+      hint.innerHTML = '';
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">Ninguna ronda sospechosa por ahora.</td></tr>';
+      return;
+    }
+    hint.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;">' + list.length + ' ronda(s) con diferencial fuera de lo normal (&lt; '+SUSPICIOUS_DIFF_LOW+' o &gt; '+SUSPICIOUS_DIFF_HIGH+').</div>';
+    tbody.innerHTML = list.map(function(r){
+      return '<tr><td>'+esc(r.date)+'</td><td>'+esc(pname(r.player))+'</td><td>'+esc(r.course)+' ('+esc(r.tee)+')</td>' +
+        '<td class="num">'+r.differential.toFixed(1)+'</td>' +
+        '<td style="white-space:nowrap;"><button class="btn small" data-susp-dismiss="'+esc(r.id)+'">No es un error</button> ' +
+        '<button class="btn small danger" data-susp-delete="'+esc(r.id)+'">Borrar</button></td></tr>';
+    }).join('');
+    $all('[data-susp-dismiss]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        StoreOps.updateRound(btn.getAttribute('data-susp-dismiss'), { dismissedSuspicious: true }).then(render);
+      });
+    });
+    $all('[data-susp-delete]', tbody).forEach(function(btn){
+      var confirming = false;
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-susp-delete');
+        if(!confirming){ confirming = true; btn.textContent = '¿Seguro?'; setTimeout(function(){ confirming=false; btn.textContent='Borrar'; }, 3000); return; }
+        var round = rounds().find(function(x){ return x.id === id; });
+        if(!round){ render(); return; }
+        deleteRoundWithLog(round, 'borrada desde el indicador de rondas sospechosas').then(render);
+      });
+    });
   }
 
   // ---------- Papelera: rondas borradas (por su propio jugador, o por el admin) ----------
