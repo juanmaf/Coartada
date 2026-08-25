@@ -723,12 +723,28 @@
   }
 
   async function seedInitialData(){
-    var batch = writeBatch(db);
-    SEED.players.forEach(function(p){ batch.set(doc(db,'players', p.id), { name: p.name, team: p.team || '' }); });
-    SEED.tees.forEach(function(t){ batch.set(doc(collection(db,'tees')), t); });
-    SEED.rounds.forEach(function(r){ batch.set(doc(collection(db,'rounds')), r); });
-    batch.set(doc(db,'config','main'), SEED.config || { pin: '2026', autoApprove: false });
-    await batch.commit();
+    // Firestore limita cada writeBatch a 500 operaciones. Con el histórico ya grande del grupo
+    // (jugadores + equipos + barras + rondas + config en un único batch superaba ese límite
+    // hace tiempo, aunque no se hubiera notado por no haberse vuelto a sembrar una base vacía
+    // desde entonces), las operaciones se reparten aquí en tandas de como mucho SEED_CHUNK cada una.
+    var ops = [];
+    SEED.players.forEach(function(p){ ops.push(function(b){ b.set(doc(db,'players', p.id), { name: p.name, team: p.team || '' }); }); });
+    (SEED.teams||[]).forEach(function(t){ ops.push(function(b){ b.set(doc(db,'teams', t.id), { name: t.name }); }); });
+    SEED.tees.forEach(function(t){
+      var ref = doc(collection(db,'tees'));
+      ops.push(function(b){ b.set(ref, t); });
+    });
+    SEED.rounds.forEach(function(r){
+      var ref = doc(collection(db,'rounds'));
+      ops.push(function(b){ b.set(ref, r); });
+    });
+    ops.push(function(b){ b.set(doc(db,'config','main'), SEED.config || { pin: '2026', autoApprove: false }); });
+    var SEED_CHUNK = 450;
+    for(var i=0; i<ops.length; i+=SEED_CHUNK){
+      var batch = writeBatch(db);
+      ops.slice(i, i+SEED_CHUNK).forEach(function(fn){ fn(batch); });
+      await batch.commit();
+    }
   }
 
   // ---------- Operaciones de escritura (sustituyen a las mutaciones directas del DOM) ----------
