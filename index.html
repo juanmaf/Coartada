@@ -764,7 +764,8 @@
       var b = writeBatch(db);
       ids.forEach(function(id){ b.delete(doc(db,'tees', id)); });
       return b.commit();
-    }
+    },
+    updateTee: function(id, patch){ return updateDoc(doc(db,'tees', id), patch); }
   };
 
   // ---------- helpers ----------
@@ -825,7 +826,7 @@
     return Store.teams.map(function(t){ return { id: t.id, name: t.name }; });
   }
   function tees(){
-    return Store.tees.map(function(t){ return { id: t.id, course: t.course, color: t.color, cr: parseFloat(t.cr), sr: parseFloat(t.sr), par: parseInt(t.par,10) }; });
+    return Store.tees.map(function(t){ return { id: t.id, course: t.course, color: t.color, cr: parseFloat(t.cr), sr: parseFloat(t.sr), par: parseInt(t.par,10), hidden: !!t.hidden }; });
   }
   function courseNames(){
     var seen = {}; var out = [];
@@ -1313,7 +1314,11 @@
   var rfCourseCombo = courseCombo($('#rf-course-search'), $('#rf-course'), $('#rf-course-menu'));
   function populateTeeSelect(courseName){
     var sel = $('#rf-tee');
-    var ts = tees().filter(function(t){ return t.course===courseName; });
+    // Las barras marcadas como "obsoleta" (hidden) siguen existiendo para las rondas históricas
+    // que ya las usan, pero no se ofrecen aquí para rondas nuevas — evita elegir por error una
+    // valoración antigua cuando ya hay una vigente para el mismo campo/color (ver decisiones del
+    // proyecto, sección "barras obsoletas").
+    var ts = tees().filter(function(t){ return t.course===courseName && !t.hidden; });
     if(ts.length===0){ sel.innerHTML = '<option value="">Elige campo primero</option>'; return; }
     sel.innerHTML = '<option value="">Elige barra…</option>' + ts.map(function(t){
       return '<option value="'+esc(t.color)+'">'+esc(t.color)+' (CR '+t.cr+' / SR '+t.sr+' / Par '+t.par+')</option>';
@@ -2315,10 +2320,21 @@
     var out = '';
     Object.keys(byCourse).sort().forEach(function(cName){
       byCourse[cName].forEach(function(t,i){
-        out += '<tr><td>'+(i===0?esc(cName):'')+'</td><td>'+esc(t.color)+'</td><td class="num">'+t.par+'</td><td class="num">'+t.cr+'</td><td class="num">'+t.sr+'</td><td></td></tr>';
+        var badge = t.hidden ? ' <span class="pill muted" title="No se ofrece para rondas nuevas; las rondas que ya la usan no cambian.">obsoleta</span>' : '';
+        var action = adminUnlocked
+          ? '<button class="btn small" data-toggle-tee-hidden="'+esc(t.id)+'" data-hidden="'+(t.hidden?'1':'0')+'">'+(t.hidden?'Mostrar':'Ocultar')+'</button>'
+          : '';
+        out += '<tr><td>'+(i===0?esc(cName):'')+'</td><td>'+esc(t.color)+badge+'</td><td class="num">'+t.par+'</td><td class="num">'+t.cr+'</td><td class="num">'+t.sr+'</td><td>'+action+'</td></tr>';
       });
     });
     tbody.innerHTML = out;
+    $all('[data-toggle-tee-hidden]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-toggle-tee-hidden');
+        var isHidden = btn.getAttribute('data-hidden') === '1';
+        StoreOps.updateTee(id, { hidden: !isHidden }).then(render);
+      });
+    });
   }
 
   // ---------- Admin view ----------
