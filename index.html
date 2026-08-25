@@ -280,6 +280,10 @@
   </header>
 
   <div id="syncBanner" class="banner warn" hidden></div>
+  <div id="updateBanner" class="banner info" hidden style="justify-content:space-between;align-items:center;">
+    <span>Hay una versión nueva de la app. Termina lo que estás escribiendo y se recargará sola — o pulsa aquí.</span>
+    <button type="button" id="updateReloadBtn">Recargar ahora</button>
+  </div>
 
   <!-- ======================= VIEWS ======================= -->
   <main>
@@ -315,6 +319,7 @@
             <div>
               <h2>Clasificación</h2>
               <p id="rankingSubtitle">Ordenado de mejor (más bajo) a peor hándicap.</p>
+              <p style="font-size:11.5px;color:var(--muted);margin-top:2px;">🔥 bajando de hándicap con fuerza este último mes · 🥶 subiendo de hándicap este último mes</p>
             </div>
             <div class="row" style="gap:8px;flex-wrap:wrap;">
               <div class="ranking-asof">
@@ -401,6 +406,13 @@
         </div>
 
         <div class="card">
+          <div class="section-head">
+            <div><h2>Mi hándicap: últimas 20 rondas</h2><p>Cuáles de tus rondas recientes cuentan de verdad para tu hándicap actual.</p></div>
+          </div>
+          <div id="myHcpWrap"></div>
+        </div>
+
+        <div class="card">
           <details id="importDetails">
             <summary style="cursor:pointer;font-weight:600;">Importar historial (CSV de Handicap Tracker)</summary>
             <p style="font-size:13px;color:var(--muted);margin:10px 0;">
@@ -424,7 +436,7 @@
             <div><h2>Rondas registradas</h2><p>Las tuyas siempre se ven; las de los demás solo una vez aprobadas.</p></div>
           </div>
           <div class="table-wrap"><table class="data" id="roundsTable">
-            <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th>Barra</th><th class="num">HCP juego</th><th class="num">Stableford</th><th class="num">Diferencial</th><th>Estado</th><th></th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th>Barra</th><th class="num">HCP juego</th><th class="num">Stableford</th><th class="num">Diferencial</th><th>Clima</th><th>Estado</th><th></th></tr></thead>
             <tbody></tbody>
           </table></div>
         </div>
@@ -675,8 +687,17 @@
   var app = initializeApp(window.HCP_FIREBASE_CONFIG);
   var db = getFirestore(app);
 
+  // ---------- Control de versión ----------
+  // GitHub Pages no tiene "build": el HTML que sirve es exactamente el commiteado, y una
+  // pestaña abierta antes de un despliegue sigue ejecutando el código viejo indefinidamente
+  // (sin avisar) hasta que alguien la recarga a mano. Esto causó una incidencia real el
+  // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
+  // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
+  // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
+  var APP_VERSION = "2026-08-25.2";
+
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
-  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], config: { pin: '2026', autoApprove: false } };
+  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], config: { pin: '2026', autoApprove: false } };
   var onStoreChange = null;
   var ready = { players: false, teams: false, tees: false, rounds: false, config: false };
   function allReady(){ return ready.players && ready.teams && ready.tees && ready.rounds && ready.config; }
@@ -715,6 +736,12 @@
     Store.deletedRounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
     if(onStoreChange) onStoreChange();
   }, function(err){ showConnError(err); });
+  // Caché compartida de geocodificación por campo (para el clima del día jugado, ver más
+  // abajo): tampoco bloquea el primer render ni la detección de "base de datos vacía" — es
+  // pura ayuda de rendimiento (evita pedir la misma geocodificación desde cada dispositivo).
+  onSnapshot(collection(db,'courseGeo'), function(snap){
+    Store.courseGeo = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+  }, function(err){ showConnError(err); });
 
   function showConnError(err){
     var b = document.getElementById('syncBanner');
@@ -737,6 +764,10 @@
     SEED.rounds.forEach(function(r){
       var ref = doc(collection(db,'rounds'));
       ops.push(function(b){ b.set(ref, r); });
+    });
+    (SEED.courseGeo||[]).forEach(function(g){
+      var ref = doc(collection(db,'courseGeo'));
+      ops.push(function(b){ b.set(ref, g); });
     });
     ops.push(function(b){ b.set(doc(db,'config','main'), SEED.config || { pin: '2026', autoApprove: false }); });
     var SEED_CHUNK = 450;
@@ -781,7 +812,8 @@
       ids.forEach(function(id){ b.delete(doc(db,'tees', id)); });
       return b.commit();
     },
-    updateTee: function(id, patch){ return updateDoc(doc(db,'tees', id), patch); }
+    updateTee: function(id, patch){ return updateDoc(doc(db,'tees', id), patch); },
+    addCourseGeo: function(data){ return addDoc(collection(db,'courseGeo'), data); }
   };
 
   // ---------- helpers ----------
@@ -931,6 +963,69 @@
     }
     return pairs;
   }
+  // ---------- Clima del día jugado (Open-Meteo, sin API key) ----------
+  // Cada ronda nueva intenta anotar, en segundo plano y sin bloquear el guardado, el tiempo
+  // que hizo ese día en el campo donde se jugó — para poder analizar en el futuro resultados
+  // según calor/viento/lluvia/frío (petición del usuario, 25/8/2026). Usa Open-Meteo: es
+  // gratis, no exige clave (pensado para llamarse directo desde el navegador de cualquiera,
+  // como esta app) y tiene un archivo histórico diario. Dos pasos: geocodificar el campo (una
+  // vez por campo — se cachea en la colección `courseGeo` para que ningún otro dispositivo
+  // tenga que repetirlo) y pedir el histórico de ese día concreto. Si algo falla (sin red,
+  // campo no localizable por nombre, API caída) simplemente no se anota el clima de esa
+  // ronda — nunca debe impedir guardarla ni bloquear la interfaz.
+  function courseGeoLookup(courseName){
+    return Store.courseGeo.find(function(g){ return g.course === courseName; }) || null;
+  }
+  function geocodeCourse(courseName){
+    var cached = courseGeoLookup(courseName);
+    if(cached) return Promise.resolve({ lat: cached.lat, lon: cached.lon });
+    function tryQuery(q){
+      return fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=es&country=ES&name=' + encodeURIComponent(q))
+        .then(function(res){ return res.json(); })
+        .then(function(data){ return (data && data.results && data.results[0]) || null; })
+        .catch(function(){ return null; });
+    }
+    return tryQuery(courseName).then(function(hit){
+      return hit || tryQuery(courseName + ' golf');
+    }).then(function(hit){
+      if(!hit) return null;
+      var geo = { lat: Math.round(hit.latitude*1000)/1000, lon: Math.round(hit.longitude*1000)/1000 };
+      StoreOps.addCourseGeo({ course: courseName, lat: geo.lat, lon: geo.lon }).catch(function(){});
+      return geo;
+    }).catch(function(){ return null; });
+  }
+  function fetchWeatherFor(lat, lon, dateIso){
+    var url = 'https://archive-api.open-meteo.com/v1/archive?latitude='+lat+'&longitude='+lon+
+      '&start_date='+dateIso+'&end_date='+dateIso+
+      '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max&timezone=Europe%2FMadrid';
+    return fetch(url).then(function(res){ return res.json(); }).then(function(data){
+      if(!data || !data.daily || !data.daily.time || data.daily.time.length===0) return null;
+      var d = data.daily;
+      return { tmax: d.temperature_2m_max[0], tmin: d.temperature_2m_min[0], precip: d.precipitation_sum[0], windMax: d.windspeed_10m_max[0] };
+    }).catch(function(){ return null; });
+  }
+  // Cola sencilla y secuencial (una ronda tras otra, con una pequeña pausa) para no lanzar
+  // decenas de peticiones a la vez a una API gratuita — sobre todo relevante al importar un
+  // CSV entero de golpe.
+  var weatherQueue = [], weatherQueueRunning = false;
+  function queueWeatherFor(roundId, courseName, dateIso){
+    weatherQueue.push({ id: roundId, course: courseName, date: dateIso });
+    pumpWeatherQueue();
+  }
+  function pumpWeatherQueue(){
+    if(weatherQueueRunning || weatherQueue.length===0) return;
+    weatherQueueRunning = true;
+    var item = weatherQueue.shift();
+    geocodeCourse(item.course).then(function(geo){
+      return geo ? fetchWeatherFor(geo.lat, geo.lon, item.date) : null;
+    }).then(function(w){
+      return w ? StoreOps.updateRound(item.id, { weather: w }).catch(function(){}) : null;
+    }).catch(function(){}).then(function(){
+      weatherQueueRunning = false;
+      setTimeout(pumpWeatherQueue, 250);
+    });
+  }
+
   function rounds(){
     return Store.rounds.map(function(r){
       return {
@@ -939,7 +1034,8 @@
         cr: parseFloat(r.cr), sr: parseFloat(r.sr), par: parseFloat(r.par),
         differential: parseFloat(r.differential), status: r.status,
         mode: r.mode || 'sf', score: (r.score!=null) ? parseFloat(r.score) : null,
-        dismissedSuspicious: r.dismissedSuspicious === true
+        dismissedSuspicious: r.dismissedSuspicious === true,
+        weather: r.weather || null
       };
     });
   }
@@ -1005,6 +1101,34 @@
     return approvedRoundsFor(playerId).filter(function(r){
       return r.date > fromDateIsoExclusive && r.date <= toDateIsoInclusive;
     }).length;
+  }
+
+  // ---------- Tendencia del último mes (icono del Ranking) ----------
+  // Compara el hándicap índice de hace 30 días con el de hoy, reutilizando la misma serie
+  // (hciSeriesFor/hciAsOfDate) que ya alimenta "a fecha concreta" y Evolución — no es un
+  // cálculo aparte. Solo se muestra icono si hubo una muestra mínima de rondas ese mes (para
+  // no reaccionar a una sola vuelta suelta) y si ya había hándicap calculado hace un mes.
+  var TREND_MIN_ROUNDS = 3, TREND_HOT_DELTA = -0.7, TREND_COLD_DELTA = 0.7;
+  function hciTrendFor(playerId){
+    var today = todayIso();
+    var monthAgo = isoDateNDaysAgo(30);
+    var now = hciAsOfDate(playerId, today);
+    var before = hciAsOfDate(playerId, monthAgo);
+    if(now==null || before==null) return null;
+    var n = roundsPlayedBetween(playerId, monthAgo, today);
+    if(n < TREND_MIN_ROUNDS) return null;
+    return { delta: round1(now - before), n: n };
+  }
+  function trendBadge(playerId){
+    var t = hciTrendFor(playerId);
+    if(!t) return '';
+    if(t.delta <= TREND_HOT_DELTA){
+      return '<span title="'+t.delta.toFixed(1)+' de hándicap en el último mes ('+t.n+' rondas) — en racha" style="cursor:default;">🔥</span> ';
+    }
+    if(t.delta >= TREND_COLD_DELTA){
+      return '<span title="+'+t.delta.toFixed(1)+' de hándicap en el último mes ('+t.n+' rondas) — perdiendo fuelle" style="cursor:default;">🥶</span> ';
+    }
+    return '';
   }
   // Mejor y peor ronda de un jugador (por diferencial — es la única medida comparable entre
   // rondas de campos/pares distintos) dentro de un periodo: si se pasa `fromDateIsoExclusive`,
@@ -1210,7 +1334,7 @@
     }
     tbody.innerHTML = rows.map(function(x,i){
       var teamName = tms.find(function(t){return t.id===x.p.team;});
-      var base = '<tr><td class="num">'+(i+1)+'</td><td>'+esc(x.p.name)+'</td><td>'+(teamName?esc(teamName.name):'—')+'</td>' +
+      var base = '<tr><td class="num">'+(i+1)+'</td><td>'+trendBadge(x.p.id)+esc(x.p.name)+'</td><td>'+(teamName?esc(teamName.name):'—')+'</td>' +
         '<td class="num">'+x.hci.toFixed(1)+'</td>';
       var extremesCells = showExt ? ('<td class="num">'+extremeCell(x.extremes.best)+'</td><td class="num">'+extremeCell(x.extremes.worst)+'</td>') : '';
       if(asOf){
@@ -1446,11 +1570,14 @@
       player: pid, course: courseName, tee: teeColor, date: date,
       stableford: pts, hcp: hcp, cr: tee.cr, sr: tee.sr, par: tee.par,
       differential: diff, status: status, mode: 'sf'
-    }).then(function(){
+    }).then(function(ref){
       $('#rf-stableford-rel').value = '0';
       updateStablefordUI();
       $('#rf-preview').hidden = true;
+      formDirty = false;
       render();
+      applyUpdateNowIfSafe();
+      queueWeatherFor(ref.id, courseName, date);
     });
   });
 
@@ -1461,6 +1588,21 @@
       return '<td class="num">—</td><td class="num">Score bruto '+r.score+'</td>';
     }
     return '<td class="num">'+r.hcp+'</td><td class="num">'+r.stableford+'</td>';
+  }
+
+  // Icono compacto con el tiempo que hizo ese día en ese campo (ver "Clima del día jugado"
+  // más arriba) — de momento solo un vistazo rápido en la tabla de Rondas; la idea es que
+  // en el futuro esto sirva de base para un análisis de resultados por condiciones (calor,
+  // viento, lluvia, frío), pedido por el usuario el 25/8/2026.
+  function weatherBadge(w){
+    if(!w || typeof w.tmax !== 'number') return '<span style="color:var(--muted);">—</span>';
+    var icon = '🌤️';
+    if(w.precip >= 1) icon = '🌧️';
+    else if(w.windMax >= 40) icon = '💨';
+    else if(w.tmax >= 32) icon = '🥵';
+    else if(w.tmax <= 5) icon = '🥶';
+    var title = 'Máx '+w.tmax+'°C · mín '+w.tmin+'°C · lluvia '+w.precip+'mm · viento máx '+w.windMax+' km/h';
+    return '<span title="'+esc(title)+'" style="cursor:default;white-space:nowrap;">'+icon+' '+Math.round(w.tmax)+'°</span>';
   }
 
   // ---------- Importar CSV (formato de exportación de Handicap Tracker) ----------
@@ -1556,6 +1698,9 @@
       slice.forEach(function(r, idx){ insertedWithIds.push(Object.assign({id: ids[idx]}, r)); });
       statusEl.textContent = 'Importando ' + Math.min(i+CHUNK, roundsToInsert.length) + '/' + roundsToInsert.length + '…';
     }
+    // Clima de cada ronda importada: se encola en segundo plano (ver queueWeatherFor), no
+    // retrasa el resto de la importación ni el resumen que se muestra a continuación.
+    insertedWithIds.forEach(function(r){ queueWeatherFor(r.id, r.course, r.date); });
 
     var importedForName = (function(){ var p = players().find(function(x){ return x.id===pid; }); return p?p.name:'—'; })();
     var summary = roundsToInsert.length + ' rondas importadas' + (adminUnlocked ? ' para ' + importedForName : '') + (status==='pendiente' ? ' (pendientes de aprobación en la pestaña Admin).' : '.');
@@ -1660,13 +1805,13 @@
     function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
     var visible = rs.filter(function(r){ return r.status==='aprobada' || r.player===id || admin; });
     var tbody = $('#roundsTable tbody');
-    if(visible.length===0){ tbody.innerHTML = '<tr><td colspan="9" class="empty">Todavía no hay rondas.</td></tr>'; return; }
+    if(visible.length===0){ tbody.innerHTML = '<tr><td colspan="10" class="empty">Todavía no hay rondas.</td></tr>'; return; }
     tbody.innerHTML = visible.map(function(r){
       var pill = r.status==='aprobada' ? '<span class="pill good">Aprobada</span>' : '<span class="pill warning">Pendiente</span>';
       var canDelete = (r.player === id) || admin;
       var delCell = canDelete ? '<button class="btn small danger" data-del-round="'+esc(r.id)+'">Borrar</button>' : '';
       return '<tr><td>'+esc(r.date)+'</td><td>'+esc(pname(r.player))+'</td><td>'+esc(r.course)+'</td><td>'+esc(r.tee)+'</td>' +
-        roundResultCells(r) + '<td class="num">'+r.differential.toFixed(1)+'</td><td>'+pill+'</td><td>'+delCell+'</td></tr>';
+        roundResultCells(r) + '<td class="num">'+r.differential.toFixed(1)+'</td><td>'+weatherBadge(r.weather)+'</td><td>'+pill+'</td><td>'+delCell+'</td></tr>';
     }).join('');
     // Confirmación en dos clics (sin diálogo nativo): el primer clic solo cambia el botón a
     // "¿Seguro?" durante unos segundos; hay que pulsar otra vez para borrar de verdad. La ronda
@@ -1688,6 +1833,47 @@
         deleteRoundWithLog(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador').then(render);
       });
     });
+  }
+
+  // Últimas 20 rondas aprobadas del jugador identificado en este dispositivo, marcando
+  // cuáles de ellas son las que realmente se usan para calcular su hándicap actual (las
+  // `conf.use` mejores por diferencial, según la misma tabla WHS — `diffsConfig` — que usa
+  // `computeHCI`). Es una explicación visual de un cálculo que ya existía, no uno nuevo.
+  function renderMyHandicapRounds(){
+    var wrap = $('#myHcpWrap');
+    var id = myId();
+    var me = players().find(function(x){ return x.id===id; });
+    if(!me){
+      wrap.innerHTML = '<p class="hint">Identifícate arriba ("¿no eres tú?") para ver aquí tus rondas y cuáles cuentan para tu hándicap.</p>';
+      return;
+    }
+    var rs = approvedRoundsFor(id); // ascendente por fecha
+    if(rs.length===0){
+      wrap.innerHTML = '<p class="hint">Todavía no tienes ninguna ronda aprobada.</p>';
+      return;
+    }
+    var last20 = rs.slice(-20);
+    var n = last20.length;
+    var conf = diffsConfig(n);
+    var countingIds = {};
+    if(conf){
+      last20.slice().sort(function(a,b){ return a.differential - b.differential; })
+        .slice(0, conf.use).forEach(function(r){ countingIds[r.id] = true; });
+    }
+    var hci = computeHCI(rs.map(function(r){ return r.differential; }));
+    var intro = conf
+      ? ('De tus últimas <b>'+n+'</b> rondas que cuentan para el hándicap, se usan las <b>'+conf.use+'</b> mejores' +
+         (conf.adj ? ' (con un ajuste de '+conf.adj+')' : '') + '. Tu hándicap actual: <b>'+(hci!=null?hci.toFixed(1):'—')+'</b>.')
+      : 'Te faltan rondas para tener hándicap calculado (hacen falta al menos 3 aprobadas).';
+    var desc = last20.slice().reverse(); // más reciente primero
+    wrap.innerHTML = '<p class="hint" style="margin-bottom:10px;">'+intro+'</p>' +
+      '<div class="table-wrap"><table class="data"><thead><tr><th>Fecha</th><th>Campo</th><th>Barra</th><th class="num">Diferencial</th><th></th></tr></thead><tbody>' +
+      desc.map(function(r){
+        var counts = countingIds[r.id];
+        var pill = counts ? '<span class="pill good">Cuenta</span>' : '<span class="pill muted">No cuenta</span>';
+        return '<tr'+(counts?' style="background:var(--fairway-wash);"':'')+'><td>'+esc(r.date)+'</td><td>'+esc(r.course)+'</td><td>'+esc(r.tee)+'</td><td class="num">'+r.differential.toFixed(1)+'</td><td>'+pill+'</td></tr>';
+      }).join('') +
+      '</tbody></table></div>';
   }
 
   function renderPlayerChip(){
@@ -2524,7 +2710,7 @@
           differential: entry.differential, status: entry.status, mode: entry.mode || 'sf'
         };
         StoreOps.addRound(restored)
-          .then(function(){ return StoreOps.deleteTrashEntry(entry.id); })
+          .then(function(ref){ queueWeatherFor(ref.id, restored.course, restored.date); return StoreOps.deleteTrashEntry(entry.id); })
           .then(render);
       });
     });
@@ -2549,6 +2735,41 @@
     $('#syncBanner').textContent = 'Sin conexión: los cambios no se pueden guardar hasta que vuelvas a tener internet.';
   }
 
+  // ---------- recarga automática cuando hay una versión nueva publicada ----------
+  // No se recarga a lo bruto en cuanto se detecta una versión nueva: si alguien tiene el
+  // formulario de "Añadir ronda" a medio rellenar perdería lo escrito. Por eso se marca
+  // `formDirty` mientras hay algo tocado en ese formulario, y la recarga automática solo
+  // ocurre si no hay nada sin guardar; si lo hay, se espera a que se envíe la ronda (o se
+  // avisa con un banner y un botón para recargar cuando la persona quiera).
+  var formDirty = false, updateAvailable = false;
+  $('#roundForm').addEventListener('input', function(){ formDirty = true; });
+  $('#roundForm').addEventListener('change', function(){ formDirty = true; });
+
+  function applyUpdateNowIfSafe(){
+    if(updateAvailable && !formDirty){ location.reload(); }
+  }
+
+  function checkForUpdate(){
+    fetch('index.html?_=' + Date.now(), { cache: 'no-store' })
+      .then(function(res){ return res.text(); })
+      .then(function(html){
+        var m = html.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+        if(!m || m[1] === APP_VERSION) return;
+        updateAvailable = true;
+        if(!formDirty){ location.reload(); return; }
+        var b = document.getElementById('updateBanner');
+        if(b) b.hidden = false;
+      })
+      .catch(function(){ /* sin conexión o página no accesible: no hay nada que comprobar ahora */ });
+  }
+  var updateReloadBtn = document.getElementById('updateReloadBtn');
+  if(updateReloadBtn) updateReloadBtn.addEventListener('click', function(){ location.reload(); });
+  setTimeout(checkForUpdate, 15000);            // poco después de abrir, por si la pestaña ya estaba abierta con código viejo
+  setInterval(checkForUpdate, 5 * 60 * 1000);    // cada 5 minutos mientras la pestaña esté abierta
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') checkForUpdate();
+  });
+
   // ---------- master render ----------
   function render(){
     renderWhoAmI();
@@ -2559,6 +2780,7 @@
     updateSuggestedHcp();
     renderRanking();
     renderRoundsFeed();
+    renderMyHandicapRounds();
     renderEvoList();
     renderEvoChart();
     renderNivelPlayerList();
