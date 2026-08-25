@@ -433,7 +433,30 @@
 
         <div class="card">
           <div class="section-head">
-            <div><h2>Rondas registradas</h2><p>Las tuyas siempre se ven; las de los demás solo una vez aprobadas.</p></div>
+            <div><h2>Filtrar y comparar</h2><p>Por jugador, campo, periodo y clima — con subtotales para ver qué influye más en el resultado.</p></div>
+          </div>
+          <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div class="field" style="margin:0;flex:1 1 160px;"><label for="rf2Player">Jugador</label><select id="rf2Player"><option value="">Todos</option></select></div>
+            <div class="field" style="margin:0;flex:1 1 200px;"><label for="rf2Course">Campo</label><select id="rf2Course"><option value="">Todos</option></select></div>
+            <div class="field" style="margin:0;flex:0 0 145px;"><label for="rf2From">Desde</label><input type="date" id="rf2From"></div>
+            <div class="field" style="margin:0;flex:0 0 145px;"><label for="rf2To">Hasta</label><input type="date" id="rf2To"></div>
+            <div class="field" style="margin:0;flex:0 0 150px;"><label for="rf2Temp">Temperatura</label>
+              <select id="rf2Temp"><option value="">Todas</option><option value="frio">Frío (&lt;15°)</option><option value="templado">Templado (15-28°)</option><option value="calor">Calor (&gt;28°)</option></select>
+            </div>
+            <div class="field" style="margin:0;flex:0 0 140px;"><label for="rf2Rain">Lluvia</label>
+              <select id="rf2Rain"><option value="">Todas</option><option value="si">Con lluvia</option><option value="no">Sin lluvia</option></select>
+            </div>
+            <div class="field" style="margin:0;flex:0 0 160px;"><label for="rf2Wind">Viento</label>
+              <select id="rf2Wind"><option value="">Todo</option><option value="fuerte">Fuerte (≥30 km/h)</option><option value="normal">Normal</option></select>
+            </div>
+            <button type="button" class="btn small" id="rf2Clear">Quitar filtros</button>
+          </div>
+          <div id="rf2Subtotals" style="margin-top:16px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="section-head">
+            <div><h2>Rondas registradas</h2><p>Las tuyas siempre se ven; las de los demás solo una vez aprobadas. La tabla respeta los filtros de arriba.</p></div>
           </div>
           <div class="table-wrap"><table class="data" id="roundsTable">
             <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th>Barra</th><th class="num">HCP juego</th><th class="num">Stableford</th><th class="num">Diferencial</th><th>Clima</th><th>Estado</th><th></th></tr></thead>
@@ -1797,6 +1820,83 @@
     importCsvRows().finally(function(){ $('#importCsvBtn').disabled = false; });
   });
 
+  // ---------- Filtrar y comparar (pestaña Rondas) ----------
+  // Filtro por jugador/campo/periodo/clima sobre la tabla de rondas, más un panel de
+  // subtotales para comparar cómo varía el diferencial medio según cada condición — pedido
+  // por el usuario el 25/8/2026 ("que de todo salieran subtotales para poder ver qué
+  // variables influyen más en los resultados"). Los cubos de clima son deliberadamente
+  // simples (temperatura/lluvia/viento en 2-3 franjas cada uno) para que las comparaciones
+  // salgan con suficiente tamaño de muestra; no es un análisis estadístico, es un vistazo.
+  var roundsFilter = { player: '', course: '', from: '', to: '', temp: '', rain: '', wind: '' };
+  function tempBucket(w){ if(!w || typeof w.tmax !== 'number') return null; return w.tmax < 15 ? 'frio' : (w.tmax > 28 ? 'calor' : 'templado'); }
+  function rainBucket(w){ if(!w || typeof w.precip !== 'number') return null; return w.precip >= 1 ? 'si' : 'no'; }
+  function windBucket(w){ if(!w || typeof w.windMax !== 'number') return null; return w.windMax >= 30 ? 'fuerte' : 'normal'; }
+  function passesRoundsFilter(r){
+    if(roundsFilter.player && r.player !== roundsFilter.player) return false;
+    if(roundsFilter.course && r.course !== roundsFilter.course) return false;
+    if(roundsFilter.from && r.date < roundsFilter.from) return false;
+    if(roundsFilter.to && r.date > roundsFilter.to) return false;
+    if(roundsFilter.temp && tempBucket(r.weather) !== roundsFilter.temp) return false;
+    if(roundsFilter.rain && rainBucket(r.weather) !== roundsFilter.rain) return false;
+    if(roundsFilter.wind && windBucket(r.weather) !== roundsFilter.wind) return false;
+    return true;
+  }
+  function renderRoundsFilterControls(){
+    var ps = players().slice().sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
+    var playerSel = $('#rf2Player'), keepP = playerSel.value;
+    playerSel.innerHTML = '<option value="">Todos</option>' + ps.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
+    playerSel.value = keepP;
+    var courseSel = $('#rf2Course'), keepC = courseSel.value;
+    var names = courseNames().slice().sort(function(a,b){ return a.localeCompare(b,'es'); });
+    courseSel.innerHTML = '<option value="">Todos</option>' + names.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
+    courseSel.value = keepC;
+  }
+  ['#rf2Player','#rf2Course','#rf2From','#rf2To','#rf2Temp','#rf2Rain','#rf2Wind'].forEach(function(sel){
+    $(sel).addEventListener('change', function(){
+      roundsFilter.player = $('#rf2Player').value;
+      roundsFilter.course = $('#rf2Course').value;
+      roundsFilter.from = $('#rf2From').value;
+      roundsFilter.to = $('#rf2To').value;
+      roundsFilter.temp = $('#rf2Temp').value;
+      roundsFilter.rain = $('#rf2Rain').value;
+      roundsFilter.wind = $('#rf2Wind').value;
+      renderRoundsFeed();
+    });
+  });
+  $('#rf2Clear').addEventListener('click', function(){
+    roundsFilter = { player:'', course:'', from:'', to:'', temp:'', rain:'', wind:'' };
+    ['#rf2Player','#rf2Course','#rf2From','#rf2To','#rf2Temp','#rf2Rain','#rf2Wind'].forEach(function(sel){ $(sel).value = ''; });
+    renderRoundsFeed();
+  });
+  function avgDiff(list){ return list.length ? round1(list.reduce(function(s,r){ return s+r.differential; },0)/list.length) : null; }
+  function renderRoundsSubtotals(list){
+    var box = $('#rf2Subtotals');
+    if(list.length===0){ box.innerHTML = '<p class="hint">Ninguna ronda coincide con estos filtros.</p>'; return; }
+    var withWeather = list.filter(function(r){ return r.weather && typeof r.weather.tmax === 'number'; });
+    var overall = avgDiff(list);
+    var best = list.reduce(function(a,b){ return b.differential<a.differential ? b : a; });
+    var worst = list.reduce(function(a,b){ return b.differential>a.differential ? b : a; });
+    function bucketRow(bucketFn, labels, order){
+      var groups = {};
+      withWeather.forEach(function(r){ var k=bucketFn(r.weather); if(k==null) return; (groups[k]=groups[k]||[]).push(r); });
+      var parts = order.filter(function(k){ return groups[k]; }).map(function(k){
+        return '<span class="pill muted" style="margin-right:6px;">'+esc(labels[k])+': <b>'+avgDiff(groups[k]).toFixed(1)+'</b> ('+groups[k].length+')</span>';
+      });
+      return parts.length ? parts.join('') : '<span class="hint">Sin datos de clima en esta selección.</span>';
+    }
+    box.innerHTML =
+      '<div class="row" style="gap:26px;flex-wrap:wrap;margin-bottom:14px;">' +
+        '<div class="stat-tile"><span class="label">Rondas</span><span class="value num" style="font-size:22px;">'+list.length+'</span></div>' +
+        '<div class="stat-tile"><span class="label">Diferencial medio</span><span class="value num" style="font-size:22px;">'+(overall!=null?overall.toFixed(1):'—')+'</span></div>' +
+        '<div class="stat-tile"><span class="label">Mejor vuelta ('+esc(fmtDateShort(best.date,false))+')</span><span class="value num" style="font-size:22px;">'+best.differential.toFixed(1)+'</span></div>' +
+        '<div class="stat-tile"><span class="label">Peor vuelta ('+esc(fmtDateShort(worst.date,false))+')</span><span class="value num" style="font-size:22px;">'+worst.differential.toFixed(1)+'</span></div>' +
+      '</div>' +
+      '<p style="font-size:12px;color:var(--muted);margin:0 0 8px;">Diferencial medio según la condición ese día ('+withWeather.length+' de estas '+list.length+' rondas tienen clima anotado) — cuanta más diferencia entre los valores de una fila, más parece influir esa variable:</p>' +
+      '<div style="margin-bottom:6px;"><b style="font-size:12.5px;">Temperatura:</b> '+bucketRow(tempBucket, {frio:'Frío (<15°)', templado:'Templado', calor:'Calor (>28°)'}, ['frio','templado','calor'])+'</div>' +
+      '<div style="margin-bottom:6px;"><b style="font-size:12.5px;">Lluvia:</b> '+bucketRow(rainBucket, {si:'Con lluvia', no:'Sin lluvia'}, ['no','si'])+'</div>' +
+      '<div><b style="font-size:12.5px;">Viento:</b> '+bucketRow(windBucket, {fuerte:'Fuerte (≥30 km/h)', normal:'Normal'}, ['normal','fuerte'])+'</div>';
+  }
+
   function renderRoundsFeed(){
     var id = myId();
     var admin = adminUnlocked;
@@ -1804,9 +1904,12 @@
     var ps = players();
     function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
     var visible = rs.filter(function(r){ return r.status==='aprobada' || r.player===id || admin; });
+    renderRoundsFilterControls();
+    var filtered = visible.filter(passesRoundsFilter);
+    renderRoundsSubtotals(filtered);
     var tbody = $('#roundsTable tbody');
-    if(visible.length===0){ tbody.innerHTML = '<tr><td colspan="10" class="empty">Todavía no hay rondas.</td></tr>'; return; }
-    tbody.innerHTML = visible.map(function(r){
+    if(filtered.length===0){ tbody.innerHTML = '<tr><td colspan="10" class="empty">Ninguna ronda coincide con los filtros de arriba.</td></tr>'; return; }
+    tbody.innerHTML = filtered.map(function(r){
       var pill = r.status==='aprobada' ? '<span class="pill good">Aprobada</span>' : '<span class="pill warning">Pendiente</span>';
       var canDelete = (r.player === id) || admin;
       var delCell = canDelete ? '<button class="btn small danger" data-del-round="'+esc(r.id)+'">Borrar</button>' : '';
