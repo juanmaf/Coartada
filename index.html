@@ -253,6 +253,35 @@
   .ranking-asof input[type="date"]{ width:auto; }
 
   footer.note{ color:var(--muted); font-size:12px; text-align:center; margin-top:30px; }
+
+  /* Móvil: es donde se meten las rondas y se mira el ranking la mayoría de las veces, así que
+     esto no es un simple "que no se rompa" sino la vista principal a cuidar. La barra de
+     pestañas pasa a desplazarse en horizontal en vez de partirse en varias líneas, las tarjetas
+     ganan algo de aire en vertical reduciendo su relleno, y los tres datos generales del
+     ranking (jugadores/rondas/campos) — ya al final de la pantalla, ver #view-ranking — se
+     aprietan en una fila de 3 en vez de forzar el ancho fijo que tienen en escritorio. */
+  @media (max-width:640px){
+    .app-shell{ padding:0 12px 48px; }
+    .card{ padding:14px 16px; }
+    .topbar{
+      display:grid; grid-template-columns:1fr auto; grid-template-areas:"brand who" "tabs tabs";
+      gap:8px 12px; align-items:center; padding:14px 0 12px;
+    }
+    .brand{ grid-area:brand; margin-right:0; }
+    .whoami{ grid-area:who; }
+    .tabs{
+      grid-area:tabs; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+      scrollbar-width:none; margin:0 -12px; padding:0 12px 2px;
+    }
+    .tabs::-webkit-scrollbar{ display:none; }
+    .tab-btn{ flex:none; }
+    .stats-row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+    .stats-row .card{ flex:none; min-width:0; padding:10px 6px; text-align:center; }
+    .stats-row .stat-tile{ align-items:center; }
+    .stats-row .stat-tile .label{ font-size:10.5px; }
+    .stats-row .stat-tile .value{ font-size:19px; }
+    .modal{ padding:18px; }
+  }
 </style>
 </head>
 <body>
@@ -275,6 +304,7 @@
       <button class="tab-btn" role="tab" data-view="equipos">Equipos</button>
       <button class="tab-btn" role="tab" data-view="campos">Campos</button>
       <button class="tab-btn" role="tab" data-view="admin">Admin</button>
+      <button class="tab-btn" role="tab" data-view="ryder" id="ryderTabBtn" hidden>Ryder</button>
     </nav>
     <div class="whoami" id="whoamiBox"></div>
   </header>
@@ -293,26 +323,6 @@
       <div class="stack">
         <div class="banner info">
           Ranking informativo por hándicap WHS actual. No decide nada por sí solo — es para presumir o para llorar, según toque.
-        </div>
-        <div class="row">
-          <div class="card" style="flex:0 0 200px;">
-            <div class="stat-tile">
-              <span class="label">Jugadores con hándicap</span>
-              <span class="value num" id="statPlayers">–</span>
-            </div>
-          </div>
-          <div class="card" style="flex:0 0 200px;">
-            <div class="stat-tile">
-              <span class="label">Rondas aprobadas</span>
-              <span class="value num" id="statRounds">–</span>
-            </div>
-          </div>
-          <div class="card" style="flex:0 0 200px;">
-            <div class="stat-tile">
-              <span class="label">Campos en la base</span>
-              <span class="value num" id="statCourses">–</span>
-            </div>
-          </div>
         </div>
         <div class="card">
           <div class="section-head">
@@ -338,6 +348,26 @@
             <thead><tr><th>#</th><th>Jugador</th><th>Equipo</th><th class="num">HCP</th><th class="num">Rondas</th></tr></thead>
             <tbody></tbody>
           </table></div>
+        </div>
+        <div class="row stats-row">
+          <div class="card" style="flex:0 0 200px;">
+            <div class="stat-tile">
+              <span class="label">Jugadores con hándicap</span>
+              <span class="value num" id="statPlayers">–</span>
+            </div>
+          </div>
+          <div class="card" style="flex:0 0 200px;">
+            <div class="stat-tile">
+              <span class="label">Rondas aprobadas</span>
+              <span class="value num" id="statRounds">–</span>
+            </div>
+          </div>
+          <div class="card" style="flex:0 0 200px;">
+            <div class="stat-tile">
+              <span class="label">Campos en la base</span>
+              <span class="value num" id="statCourses">–</span>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -677,6 +707,116 @@
       </div>
     </section>
 
+    <!-- RYDER -->
+    <section class="view" id="view-ryder">
+      <div class="stack">
+        <div class="card" id="ryderLockedNotice" hidden>
+          <p style="color:var(--muted);">Desbloquea el PIN de administración en la pestaña Admin para usar esta herramienta.</p>
+        </div>
+        <div class="stack" id="ryderUnlocked" hidden>
+          <div class="banner info">
+            Preparación de la Ryder Pucela Cup: monta los dos equipos, calcula el hándicap de juego de cada uno para el campo del torneo y las parejas de cada formato. Solo la ves tú — no aparece para el resto del grupo.
+          </div>
+
+          <div class="card">
+            <div class="section-head"><div><h2>Datos del evento</h2><p>El campo y barra del torneo se usan para calcular el hándicap de juego de todos, igual que en Rondas.</p></div></div>
+            <form id="ryderEventForm">
+              <div class="grid2">
+                <div class="field"><label for="rdName">Nombre del evento</label><input type="text" id="rdName" placeholder="Ej. Ryder Pucela Cup 2026 – Oliva Nova"></div>
+                <div class="field"><label for="rdDates">Fechas</label><input type="text" id="rdDates" placeholder="19-20 septiembre 2026"></div>
+              </div>
+              <div class="grid2">
+                <div class="field"><label for="rdTeamA">Nombre equipo A</label><input type="text" id="rdTeamA" placeholder="Pichones"></div>
+                <div class="field"><label for="rdTeamB">Nombre equipo B</label><input type="text" id="rdTeamB" placeholder="Ardillas"></div>
+              </div>
+              <label>Barra del campo del torneo</label>
+              <div class="grid3">
+                <div class="field"><label for="rdPar">Par</label><input type="number" id="rdPar" step="1"></div>
+                <div class="field"><label for="rdCr">CR</label><input type="number" id="rdCr" step="0.1"></div>
+                <div class="field"><label for="rdSr">Slope</label><input type="number" id="rdSr" step="1"></div>
+              </div>
+              <button class="btn primary" type="submit">Guardar datos del evento</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="section-head"><div><h2>Jugadores</h2><p>Añade a cada equipo jugadores que ya están en la app (su hándicap sube solo del ranking) o invitados sueltos que no la usan (con hándicap a mano).</p></div></div>
+            <div class="grid2">
+              <div class="stack">
+                <h3 style="font-size:15px;" id="ryderTeamLabelA">Equipo A</h3>
+                <div class="row" style="gap:8px;align-items:end;">
+                  <div class="field" style="margin:0;flex:1;"><label for="ryderAddPlayerA">Jugador de la app</label><select id="ryderAddPlayerA"></select></div>
+                  <button type="button" class="btn small" id="ryderAddPlayerBtnA">Añadir</button>
+                </div>
+                <div class="row" style="gap:8px;align-items:end;">
+                  <div class="field" style="margin:0;flex:1;"><label for="ryderAddGuestNameA">Invitado (nombre)</label><input type="text" id="ryderAddGuestNameA"></div>
+                  <div class="field" style="margin:0;width:90px;"><label for="ryderAddGuestHcpA">HCP</label><input type="number" step="0.1" id="ryderAddGuestHcpA"></div>
+                  <button type="button" class="btn small" id="ryderAddGuestBtnA">Añadir</button>
+                </div>
+                <div id="ryderRosterListA"></div>
+              </div>
+              <div class="stack">
+                <h3 style="font-size:15px;" id="ryderTeamLabelB">Equipo B</h3>
+                <div class="row" style="gap:8px;align-items:end;">
+                  <div class="field" style="margin:0;flex:1;"><label for="ryderAddPlayerB">Jugador de la app</label><select id="ryderAddPlayerB"></select></div>
+                  <button type="button" class="btn small" id="ryderAddPlayerBtnB">Añadir</button>
+                </div>
+                <div class="row" style="gap:8px;align-items:end;">
+                  <div class="field" style="margin:0;flex:1;"><label for="ryderAddGuestNameB">Invitado (nombre)</label><input type="text" id="ryderAddGuestNameB"></div>
+                  <div class="field" style="margin:0;width:90px;"><label for="ryderAddGuestHcpB">HCP</label><input type="number" step="0.1" id="ryderAddGuestHcpB"></div>
+                  <button type="button" class="btn small" id="ryderAddGuestBtnB">Añadir</button>
+                </div>
+                <div id="ryderRosterListB"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Fourball</h2><p>Sábado mañana — mejor bola. Cada jugador recibe golpes según la diferencia con el hándicap más bajo de los 4 de su partido.</p></div>
+              <div class="field" style="margin:0;width:140px;"><label for="rdAllowFourball">Golpes concedidos</label><div class="row" style="gap:4px;align-items:center;"><input type="number" id="rdAllowFourball" step="1" min="0" max="100" style="width:70px;"><span>%</span></div></div>
+            </div>
+            <button type="button" class="btn small" id="rdAddPairFourball" style="margin-bottom:12px;">+ Añadir pareja</button>
+            <div id="rdPairsFourball"></div>
+            <p class="hint" id="rdTotalsFourball" style="margin-top:10px;"></p>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Foursome</h2><p>Sábado tarde — bola alterna. Golpes por pareja según la suma de hándicaps de sus dos jugadores.</p></div>
+              <div class="field" style="margin:0;width:140px;"><label for="rdAllowFoursome">Golpes concedidos</label><div class="row" style="gap:4px;align-items:center;"><input type="number" id="rdAllowFoursome" step="1" min="0" max="100" style="width:70px;"><span>%</span></div></div>
+            </div>
+            <button type="button" class="btn small" id="rdAddPairFoursome" style="margin-bottom:12px;">+ Añadir pareja</button>
+            <div id="rdPairsFoursome"></div>
+            <p class="hint" id="rdTotalsFoursome" style="margin-top:10px;"></p>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Greensome</h2><p>Formato disponible aunque no esté previsto este año. Hándicap de pareja: un % del más bajo + el resto del más alto.</p></div>
+              <div class="row" style="gap:10px;">
+                <div class="field" style="margin:0;width:120px;"><label for="rdAllowGreensomeLow">% del bajo</label><input type="number" id="rdAllowGreensomeLow" step="1" min="0" max="100"></div>
+                <div class="field" style="margin:0;width:120px;"><label for="rdAllowGreensomeHigh">% del alto</label><input type="number" id="rdAllowGreensomeHigh" step="1" min="0" max="100"></div>
+              </div>
+            </div>
+            <button type="button" class="btn small" id="rdAddPairGreensome" style="margin-bottom:12px;">+ Añadir pareja</button>
+            <div id="rdPairsGreensome"></div>
+            <p class="hint" id="rdTotalsGreensome" style="margin-top:10px;"></p>
+          </div>
+
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Individual</h2><p>Domingo mañana — match play, un jugador contra otro.</p></div>
+              <div class="field" style="margin:0;width:140px;"><label for="rdAllowIndividual">Golpes concedidos</label><div class="row" style="gap:4px;align-items:center;"><input type="number" id="rdAllowIndividual" step="1" min="0" max="100" style="width:70px;"><span>%</span></div></div>
+            </div>
+            <button type="button" class="btn small" id="rdAddPairIndividual" style="margin-bottom:12px;">+ Añadir partido</button>
+            <div id="rdPairsIndividual"></div>
+            <p class="hint" id="rdTotalsIndividual" style="margin-top:10px;"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <footer class="note">Cálculo de hándicap WHS simplificado (sin PCC ni reducción por resultado excepcional) · datos de campo cargados por el grupo, a verificar por cada club</footer>
@@ -717,10 +857,10 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-25.2";
+  var APP_VERSION = "2026-08-25.3";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
-  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], config: { pin: '2026', autoApprove: false } };
+  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
   var onStoreChange = null;
   var ready = { players: false, teams: false, tees: false, rounds: false, config: false };
   function allReady(){ return ready.players && ready.teams && ready.tees && ready.rounds && ready.config; }
@@ -764,6 +904,13 @@
   // pura ayuda de rendimiento (evita pedir la misma geocodificación desde cada dispositivo).
   onSnapshot(collection(db,'courseGeo'), function(snap){
     Store.courseGeo = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+  }, function(err){ showConnError(err); });
+  // Preparación de la Ryder Pucela Cup (pestaña "Ryder", solo visible con el PIN de admin):
+  // un único documento con la config del evento en curso — no forma parte del arranque de
+  // la app ni de la comprobación de "base de datos vacía", como deletedRounds/courseGeo.
+  onSnapshot(doc(db,'ryder','main'), function(d){
+    Store.ryder = d.exists() ? d.data() : null;
+    if(onStoreChange) onStoreChange();
   }, function(err){ showConnError(err); });
 
   function showConnError(err){
@@ -836,7 +983,8 @@
       return b.commit();
     },
     updateTee: function(id, patch){ return updateDoc(doc(db,'tees', id), patch); },
-    addCourseGeo: function(data){ return addDoc(collection(db,'courseGeo'), data); }
+    addCourseGeo: function(data){ return addDoc(collection(db,'courseGeo'), data); },
+    setRyder: function(patch){ return setDoc(doc(db,'ryder','main'), patch, { merge: true }); }
   };
 
   // ---------- helpers ----------
@@ -844,7 +992,31 @@
   var $all = function(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); };
   var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var round1 = function(x){ return Math.round(x*10)/10; };
+  function pname(pid){ var p = players().find(function(x){ return x.id===pid; }); return p ? p.name : '—'; }
   function catColor(idx){ return "var(--s"+((idx%8)+1)+")"; }
+
+  // Confirmación de borrado en dos clics, sin diálogo nativo del navegador: el primer clic
+  // solo cambia el botón a "¿Seguro?" durante un tiempo; hay que pulsar otra vez, a tiempo,
+  // para que se ejecute onConfirm(). Se usa en todos los botones "Borrar" de la app (rondas,
+  // jugadores, avisos de ronda sospechosa) para que el comportamiento sea siempre el mismo.
+  function bindConfirmDelete(btn, onConfirm, opts){
+    opts = opts || {};
+    var label = opts.label || 'Borrar';
+    var confirmLabel = opts.confirmLabel || '¿Seguro?';
+    var timeoutMs = opts.timeoutMs || 4000;
+    var confirming = false, resetTimer = null;
+    btn.addEventListener('click', function(){
+      if(!confirming){
+        confirming = true;
+        btn.textContent = confirmLabel;
+        resetTimer = setTimeout(function(){ confirming = false; btn.textContent = label; }, timeoutMs);
+        return;
+      }
+      clearTimeout(resetTimer);
+      btn.disabled = true;
+      onConfirm();
+    });
+  }
 
   // Umbral de "ronda sospechosa": un diferencial así de extremo casi siempre viene de un dato
   // mal metido (el caso real que lo motivó: 9 hoyos jugados pero comparados con la valoración
@@ -1270,7 +1442,7 @@
   });
 
   // ---------- tabs ----------
-  var VIEWS = ["ranking","rondas","evolucion","nivel","equipos","campos","admin"];
+  var VIEWS = ["ranking","rondas","evolucion","nivel","equipos","campos","admin","ryder"];
   function showView(name){
     VIEWS.forEach(function(v){
       $('#view-'+v).classList.toggle('active', v===name);
@@ -1791,18 +1963,15 @@
       });
     });
     $all('[data-review-delete]', box).forEach(function(btn){
-      var confirming = false;
-      btn.addEventListener('click', function(){
-        var id = btn.getAttribute('data-review-delete');
-        if(!confirming){ confirming = true; btn.textContent = '¿Seguro?'; setTimeout(function(){ confirming=false; btn.textContent='Borrar'; }, 3000); return; }
+      var id = btn.getAttribute('data-review-delete');
+      bindConfirmDelete(btn, function(){
         var r = list.find(function(x){ return x.id===id; });
         if(!r) return;
-        btn.disabled = true;
         deleteRoundWithLog(r, 'borrada al revisar aviso de ronda sospechosa').then(function(){
           removeRow(id);
           render();
         });
-      });
+      }, { timeoutMs: 3000 });
     });
     $all('[data-review-dismiss]', box).forEach(function(btn){
       btn.addEventListener('click', function(){
@@ -1901,8 +2070,6 @@
     var id = myId();
     var admin = adminUnlocked;
     var rs = rounds().slice().sort(cmpDateDesc);
-    var ps = players();
-    function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
     var visible = rs.filter(function(r){ return r.status==='aprobada' || r.player===id || admin; });
     renderRoundsFilterControls();
     var filtered = visible.filter(passesRoundsFilter);
@@ -1920,17 +2087,8 @@
     // "¿Seguro?" durante unos segundos; hay que pulsar otra vez para borrar de verdad. La ronda
     // no se pierde: queda registrada en la papelera (pestaña Admin) antes de borrarse.
     $all('[data-del-round]', tbody).forEach(function(btn){
-      var confirming = false, resetTimer = null;
-      btn.addEventListener('click', function(){
-        if(!confirming){
-          confirming = true;
-          btn.textContent = '¿Seguro?';
-          resetTimer = setTimeout(function(){ confirming = false; btn.textContent = 'Borrar'; }, 4000);
-          return;
-        }
-        clearTimeout(resetTimer);
-        btn.disabled = true;
-        var rid = btn.getAttribute('data-del-round');
+      var rid = btn.getAttribute('data-del-round');
+      bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === rid; });
         if(!round){ render(); return; }
         deleteRoundWithLog(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador').then(render);
@@ -2474,17 +2632,8 @@
     // Borrar jugador: solo posible si no tiene ninguna ronda (así no se puede perder
     // histórico por error); confirmación en dos clics, igual que al borrar una ronda.
     $all('[data-del-player]', tbody).forEach(function(btn){
-      var confirming = false, resetTimer = null;
-      btn.addEventListener('click', function(){
-        if(!confirming){
-          confirming = true;
-          btn.textContent = '¿Seguro?';
-          resetTimer = setTimeout(function(){ confirming = false; btn.textContent = 'Borrar'; }, 4000);
-          return;
-        }
-        clearTimeout(resetTimer);
-        btn.disabled = true;
-        var pid = btn.getAttribute('data-del-player');
+      var pid = btn.getAttribute('data-del-player');
+      bindConfirmDelete(btn, function(){
         StoreOps.deletePlayer(pid).then(render);
       });
     });
@@ -2674,12 +2823,13 @@
       $('#adminLocked').hidden = true;
       $('#adminUnlocked').hidden = false;
       $('#pinError').style.display='none';
+      $('#ryderTabBtn').hidden = false;
       render();
     } else {
       $('#pinError').style.display='block';
     }
   });
-  try{ if(sessionStorage.getItem('hcpApp:admin')==='1') adminUnlocked = true; }catch(e){}
+  try{ if(sessionStorage.getItem('hcpApp:admin')==='1'){ adminUnlocked = true; $('#ryderTabBtn').hidden = false; } }catch(e){}
   $('#approveAllBtn').addEventListener('click', function(){
     var ids = rounds().filter(function(r){ return r.status==='pendiente'; }).map(function(r){ return r.id; });
     if(ids.length===0) return;
@@ -2691,8 +2841,6 @@
     $('#adminLocked').hidden = true; $('#adminUnlocked').hidden = false;
     $('#autoApproveToggle').checked = config().autoApprove;
 
-    var ps = players();
-    function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
     var pending = rounds().filter(function(r){ return r.status==='pendiente'; }).sort(cmpDateDesc);
     var tbody = $('#pendingTable tbody');
     if(pending.length===0){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No hay rondas pendientes.</td></tr>'; }
@@ -2749,8 +2897,6 @@
     var tbody = $('#suspiciousTable tbody');
     var hint = $('#suspiciousHint');
     if(!tbody) return;
-    var ps = players();
-    function pname(pid){ var p = ps.find(function(x){return x.id===pid;}); return p?p.name:'—'; }
     var list = rounds().filter(isSuspiciousRound).sort(cmpDateDesc);
     if(list.length===0){
       hint.innerHTML = '';
@@ -2770,14 +2916,12 @@
       });
     });
     $all('[data-susp-delete]', tbody).forEach(function(btn){
-      var confirming = false;
-      btn.addEventListener('click', function(){
-        var id = btn.getAttribute('data-susp-delete');
-        if(!confirming){ confirming = true; btn.textContent = '¿Seguro?'; setTimeout(function(){ confirming=false; btn.textContent='Borrar'; }, 3000); return; }
+      var id = btn.getAttribute('data-susp-delete');
+      bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === id; });
         if(!round){ render(); return; }
         deleteRoundWithLog(round, 'borrada desde el indicador de rondas sospechosas').then(render);
-      });
+      }, { timeoutMs: 3000 });
     });
   }
 
@@ -2825,6 +2969,272 @@
     var v = $('#newPinInput').value.trim();
     if(!v) return;
     StoreOps.setConfig({ pin: v }).then(function(){ $('#newPinInput').value=''; render(); });
+  });
+
+  // ---------- Ryder Pucela Cup: preparación de equipos, parejas y golpes concedidos ----------
+  // Pestaña solo visible/usable con el PIN de admin desbloqueado (ver #ryderTabBtn). Un único
+  // documento (`ryder/main`) con la config del evento en curso: nombre, campo del torneo,
+  // los dos equipos (jugadores de la app, que beben su hándicap del ranking en tiempo real, o
+  // invitados sueltos con hándicap a mano) y las parejas de cada formato. No se guarda nada
+  // calculado (golpes, hándicap de juego...) — se recalcula al vuelo en cada render, igual que
+  // el resto de la app calcula el hándicap WHS a partir de las rondas guardadas.
+  var RYDER_ALLOWANCE_FIELDS = {
+    fourball: 'allowances.fourball', foursome: 'allowances.foursome',
+    greensomeLow: 'allowances.greensomeLow', greensomeHigh: 'allowances.greensomeHigh',
+    individual: 'allowances.individual'
+  };
+  function ryderNewId(){ return 'rr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  function cap1(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+  function ryder(){
+    var r = Store.ryder || {};
+    return {
+      eventName: r.eventName || '',
+      dates: r.dates || '',
+      teamNames: Object.assign({ a: 'Equipo A', b: 'Equipo B' }, r.teamNames || {}),
+      tee: Object.assign({ par: 72, cr: 72, sr: 113 }, r.tee || {}),
+      allowances: Object.assign({ fourball: 0.75, foursome: 0.5, greensomeLow: 0.6, greensomeHigh: 0.4, individual: 0.75 }, r.allowances || {}),
+      roster: r.roster || [],
+      pairings: Object.assign({ fourball: [], foursome: [], greensome: [], individual: [] }, r.pairings || {})
+    };
+  }
+  function ryderEntryName(e){ return e.source==='player' ? pname(e.playerId) : (e.name || '—'); }
+  function ryderEntryHci(e){ return e.source==='player' ? currentHCIFor(e.playerId) : ((typeof e.manualHci==='number') ? e.manualHci : null); }
+  function ryderEntryCourseHcp(e, tee){ var hci = ryderEntryHci(e); return hci==null ? null : courseHandicap(hci, tee.sr, tee.cr, tee.par); }
+  // Si se quita a alguien del roster, cualquier pareja/partido de cualquier formato que lo
+  // tuviera puesto se borra entera (mejor eso que dejar una referencia a un jugador fantasma).
+  function ryderStripFromPairings(pairings, rid){
+    function refs(p){ return [].concat(Array.isArray(p.a)?p.a:[p.a], Array.isArray(p.b)?p.b:[p.b]); }
+    var out = {};
+    Object.keys(pairings).forEach(function(fmt){ out[fmt] = (pairings[fmt]||[]).filter(function(p){ return refs(p).indexOf(rid)===-1; }); });
+    return out;
+  }
+
+  function ryderComputeFourball(hA, hB, allow){
+    var all = hA.concat(hB);
+    var min = Math.min.apply(null, all);
+    function s(h){ return h===min ? 0 : Math.round((h-min)*allow.fourball); }
+    return { aStrokes:[s(hA[0]),s(hA[1])], bStrokes:[s(hB[0]),s(hB[1])] };
+  }
+  function ryderComputeFoursome(hA, hB, allow){
+    var sumA=hA[0]+hA[1], sumB=hB[0]+hB[1], min=Math.min(sumA,sumB);
+    return { aStroke: sumA===min?0:Math.round((sumA-min)*allow.foursome), bStroke: sumB===min?0:Math.round((sumB-min)*allow.foursome) };
+  }
+  function ryderComputeGreensome(hA, hB, allow){
+    function pairHcp(hs){ return Math.round(Math.min(hs[0],hs[1])*allow.greensomeLow + Math.max(hs[0],hs[1])*allow.greensomeHigh); }
+    var ha=pairHcp(hA), hb=pairHcp(hB), min=Math.min(ha,hb);
+    return { aPairHcp:ha, bPairHcp:hb, aStroke: ha===min?0:(ha-min), bStroke: hb===min?0:(hb-min) };
+  }
+  function ryderComputeIndividual(hA, hB, allow){
+    if(hA===hB) return { aStroke:0, bStroke:0 };
+    var diff = Math.round(Math.abs(hA-hB)*allow.individual);
+    return hA>hB ? { aStroke:diff, bStroke:0 } : { aStroke:0, bStroke:diff };
+  }
+
+  var RYDER_FORMATS = {
+    fourball:  { title:'Fourball',  teamSize:2, compute: ryderComputeFourball },
+    foursome:  { title:'Foursome',  teamSize:2, compute: ryderComputeFoursome },
+    greensome: { title:'Greensome', teamSize:2, compute: ryderComputeGreensome },
+    individual:{ title:'Individual', teamSize:1, compute: ryderComputeIndividual }
+  };
+
+  function setValIfNotFocused(sel, val){
+    var el = $(sel);
+    if(!el || document.activeElement===el) return;
+    el.value = (val==null) ? '' : val;
+  }
+  function renderRyderSettings(rd){
+    setValIfNotFocused('#rdName', rd.eventName);
+    setValIfNotFocused('#rdDates', rd.dates);
+    setValIfNotFocused('#rdTeamA', rd.teamNames.a);
+    setValIfNotFocused('#rdTeamB', rd.teamNames.b);
+    setValIfNotFocused('#rdPar', rd.tee.par);
+    setValIfNotFocused('#rdCr', rd.tee.cr);
+    setValIfNotFocused('#rdSr', rd.tee.sr);
+    setValIfNotFocused('#rdAllowFourball', Math.round(rd.allowances.fourball*100));
+    setValIfNotFocused('#rdAllowFoursome', Math.round(rd.allowances.foursome*100));
+    setValIfNotFocused('#rdAllowGreensomeLow', Math.round(rd.allowances.greensomeLow*100));
+    setValIfNotFocused('#rdAllowGreensomeHigh', Math.round(rd.allowances.greensomeHigh*100));
+    setValIfNotFocused('#rdAllowIndividual', Math.round(rd.allowances.individual*100));
+    $('#ryderTeamLabelA').textContent = rd.teamNames.a;
+    $('#ryderTeamLabelB').textContent = rd.teamNames.b;
+  }
+  function renderRyderAddPlayerSelect(team, rd){
+    var used = rd.roster.filter(function(e){ return e.source==='player'; }).map(function(e){ return e.playerId; });
+    var avail = players().filter(function(p){ return used.indexOf(p.id)===-1; }).sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
+    var sel = $('#ryderAddPlayer'+team.toUpperCase());
+    var keep = sel.value;
+    sel.innerHTML = '<option value="">Elige jugador de la app…</option>' + avail.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
+    if(avail.some(function(p){ return p.id===keep; })) sel.value = keep;
+  }
+  function renderRyderRosterCol(team, rd){
+    var list = rd.roster.filter(function(e){ return e.team===team; });
+    var wrap = $('#ryderRosterList'+team.toUpperCase());
+    if(list.length===0){ wrap.innerHTML = '<p class="empty">Sin jugadores todavía.</p>'; return; }
+    wrap.innerHTML = '<div class="table-wrap"><table class="data"><thead><tr><th>Jugador</th><th class="num">HCI</th><th class="num">Hcp juego</th><th></th></tr></thead><tbody>' +
+      list.map(function(e){
+        var hci = ryderEntryHci(e);
+        var chcp = ryderEntryCourseHcp(e, rd.tee);
+        var badge = e.source==='manual' ? ' <span class="pill muted">invitado</span>' : '';
+        return '<tr><td>'+esc(ryderEntryName(e))+badge+'</td><td class="num">'+(hci==null?'—':hci.toFixed(1))+'</td><td class="num">'+(chcp==null?'—':chcp)+'</td>' +
+          '<td><button type="button" class="btn small danger" data-ryder-del-roster="'+esc(e.id)+'">Quitar</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+    $all('[data-ryder-del-roster]', wrap).forEach(function(btn){
+      var rid = btn.getAttribute('data-ryder-del-roster');
+      bindConfirmDelete(btn, function(){
+        var rd2 = ryder();
+        var newRoster = rd2.roster.filter(function(x){ return x.id!==rid; });
+        StoreOps.setRyder({ roster: newRoster, pairings: ryderStripFromPairings(rd2.pairings, rid) }).then(render);
+      }, { timeoutMs: 3000 });
+    });
+  }
+  function ryderTeamHcps(ids, rd){
+    return ids.map(function(rid){
+      var e = rd.roster.find(function(x){ return x.id===rid; });
+      return e ? ryderEntryCourseHcp(e, rd.tee) : null;
+    });
+  }
+  function renderRyderFormatCard(key, rd){
+    var def = RYDER_FORMATS[key];
+    var Key = cap1(key);
+    var teamA = rd.roster.filter(function(e){ return e.team==='a'; });
+    var teamB = rd.roster.filter(function(e){ return e.team==='b'; });
+    function options(list, current){
+      return '<option value="">—</option>' + list.map(function(e){
+        return '<option value="'+esc(e.id)+'" '+(e.id===current?'selected':'')+'>'+esc(ryderEntryName(e))+'</option>';
+      }).join('');
+    }
+    var pairs = rd.pairings[key] || [];
+    var totalA = 0, totalB = 0;
+    var rowsHtml = pairs.map(function(p){
+      var aIds = def.teamSize===2 ? (p.a && p.a.length===2 ? p.a : [null,null]) : [p.a || null];
+      var bIds = def.teamSize===2 ? (p.b && p.b.length===2 ? p.b : [null,null]) : [p.b || null];
+      var aSel = aIds.map(function(rid,i){ return '<select data-ryder-slot="'+key+'|'+p.id+'|a|'+i+'">'+options(teamA, rid)+'</select>'; }).join('');
+      var bSel = bIds.map(function(rid,i){ return '<select data-ryder-slot="'+key+'|'+p.id+'|b|'+i+'">'+options(teamB, rid)+'</select>'; }).join('');
+      var complete = aIds.every(Boolean) && bIds.every(Boolean);
+      var hA = complete ? ryderTeamHcps(aIds, rd) : [];
+      var hB = complete ? ryderTeamHcps(bIds, rd) : [];
+      var calc = (complete && hA.every(function(h){return h!=null;}) && hB.every(function(h){return h!=null;}))
+        ? (def.teamSize===2 ? def.compute(hA, hB, rd.allowances) : def.compute(hA[0], hB[0], rd.allowances))
+        : null;
+      var resultHtml;
+      if(!calc){
+        resultHtml = '<span class="hint">Completa los dos lados (y su hándicap) para calcular los golpes.</span>';
+      } else {
+        var extra = (key==='greensome') ? ('<span class="pill muted">Hcp pareja '+esc(rd.teamNames.a)+': '+calc.aPairHcp+'</span> <span class="pill muted">Hcp pareja '+esc(rd.teamNames.b)+': '+calc.bPairHcp+'</span> ') : '';
+        var aStrokeTotal = calc.aStrokes ? (calc.aStrokes[0]+calc.aStrokes[1]) : calc.aStroke;
+        var bStrokeTotal = calc.bStrokes ? (calc.bStrokes[0]+calc.bStrokes[1]) : calc.bStroke;
+        var aLabel = calc.aStrokes ? calc.aStrokes.join('/') : calc.aStroke;
+        var bLabel = calc.bStrokes ? calc.bStrokes.join('/') : calc.bStroke;
+        resultHtml = extra +
+          '<span class="pill '+(aStrokeTotal?'warning':'muted')+'">'+esc(rd.teamNames.a)+': +'+aLabel+'</span> ' +
+          '<span class="pill '+(bStrokeTotal?'warning':'muted')+'">'+esc(rd.teamNames.b)+': +'+bLabel+'</span>';
+        totalA += aStrokeTotal; totalB += bStrokeTotal;
+      }
+      return '<div class="card" style="padding:12px 14px;margin-bottom:10px;">' +
+        '<div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">' +
+          '<div class="row" style="gap:6px;flex:1 1 auto;">'+aSel+'</div>' +
+          '<b style="color:var(--muted);">vs</b>' +
+          '<div class="row" style="gap:6px;flex:1 1 auto;">'+bSel+'</div>' +
+          '<button type="button" class="btn small danger" data-ryder-del-pair="'+key+'|'+p.id+'">Quitar</button>' +
+        '</div>' +
+        '<div style="margin-top:8px;">'+resultHtml+'</div>' +
+      '</div>';
+    }).join('');
+    $('#rdPairs'+Key).innerHTML = rowsHtml || '<p class="empty">Todavía no hay parejas en este formato.</p>';
+    $('#rdTotals'+Key).textContent = pairs.length ? ('Total golpes concedidos — '+rd.teamNames.a+': '+totalA+' · '+rd.teamNames.b+': '+totalB) : '';
+    $all('[data-ryder-slot]', $('#rdPairs'+Key)).forEach(function(sel){
+      sel.addEventListener('change', function(){
+        var parts = sel.getAttribute('data-ryder-slot').split('|');
+        var fmt=parts[0], pid=parts[1], side=parts[2], idx=parseInt(parts[3],10);
+        var rd2 = ryder();
+        var list = (rd2.pairings[fmt]||[]).map(function(p){
+          if(p.id!==pid) return p;
+          var np = Object.assign({}, p);
+          if(RYDER_FORMATS[fmt].teamSize===2){
+            var arr = (np[side] && np[side].length===2 ? np[side] : [null,null]).slice();
+            arr[idx] = sel.value || null;
+            np[side] = arr;
+          } else {
+            np[side] = sel.value || null;
+          }
+          return np;
+        });
+        var patch = {}; patch['pairings.'+fmt] = list;
+        StoreOps.setRyder(patch).then(render);
+      });
+    });
+    $all('[data-ryder-del-pair]', $('#rdPairs'+Key)).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var parts = btn.getAttribute('data-ryder-del-pair').split('|');
+        var fmt=parts[0], pid=parts[1];
+        var rd2 = ryder();
+        var patch = {}; patch['pairings.'+fmt] = (rd2.pairings[fmt]||[]).filter(function(p){ return p.id!==pid; });
+        StoreOps.setRyder(patch).then(render);
+      });
+    });
+  }
+  function renderRyder(){
+    if(!adminUnlocked){ $('#ryderLockedNotice').hidden=false; $('#ryderUnlocked').hidden=true; return; }
+    $('#ryderLockedNotice').hidden = true; $('#ryderUnlocked').hidden = false;
+    var rd = ryder();
+    renderRyderSettings(rd);
+    renderRyderAddPlayerSelect('a', rd); renderRyderAddPlayerSelect('b', rd);
+    renderRyderRosterCol('a', rd); renderRyderRosterCol('b', rd);
+    Object.keys(RYDER_FORMATS).forEach(function(key){ renderRyderFormatCard(key, rd); });
+  }
+  $('#ryderEventForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var patch = {
+      eventName: $('#rdName').value,
+      dates: $('#rdDates').value,
+      'teamNames.a': $('#rdTeamA').value || 'Equipo A',
+      'teamNames.b': $('#rdTeamB').value || 'Equipo B',
+      'tee.par': parseInt($('#rdPar').value,10) || 72,
+      'tee.cr': parseFloat($('#rdCr').value) || 72,
+      'tee.sr': parseInt($('#rdSr').value,10) || 113
+    };
+    StoreOps.setRyder(patch).then(render);
+  });
+  ['a','b'].forEach(function(team){
+    var T = team.toUpperCase();
+    $('#ryderAddPlayerBtn'+T).addEventListener('click', function(){
+      var pid = $('#ryderAddPlayer'+T).value;
+      if(!pid) return;
+      var rd = ryder();
+      var entry = { id: ryderNewId(), team: team, source:'player', playerId: pid };
+      StoreOps.setRyder({ roster: rd.roster.concat([entry]) }).then(render);
+    });
+    $('#ryderAddGuestBtn'+T).addEventListener('click', function(){
+      var name = $('#ryderAddGuestName'+T).value.trim();
+      if(!name) return;
+      var hcpVal = parseFloat($('#ryderAddGuestHcp'+T).value);
+      var rd = ryder();
+      var entry = { id: ryderNewId(), team: team, source:'manual', name: name, manualHci: isNaN(hcpVal) ? null : hcpVal };
+      StoreOps.setRyder({ roster: rd.roster.concat([entry]) }).then(function(){
+        $('#ryderAddGuestName'+T).value = ''; $('#ryderAddGuestHcp'+T).value = '';
+        render();
+      });
+    });
+  });
+  Object.keys(RYDER_ALLOWANCE_FIELDS).forEach(function(key){
+    var inputId = '#rdAllow'+cap1(key);
+    var el = $(inputId);
+    if(!el) return;
+    el.addEventListener('change', function(){
+      var v = parseFloat(el.value);
+      if(isNaN(v)) return;
+      var patch = {}; patch[RYDER_ALLOWANCE_FIELDS[key]] = Math.max(0, Math.min(100, v)) / 100;
+      StoreOps.setRyder(patch).then(render);
+    });
+  });
+  Object.keys(RYDER_FORMATS).forEach(function(key){
+    $('#rdAddPair'+cap1(key)).addEventListener('click', function(){
+      var rd = ryder();
+      var teamSize = RYDER_FORMATS[key].teamSize;
+      var newPair = { id: ryderNewId(), a: teamSize===2 ? [null,null] : null, b: teamSize===2 ? [null,null] : null };
+      var patch = {}; patch['pairings.'+key] = (rd.pairings[key]||[]).concat([newPair]);
+      StoreOps.setRyder(patch).then(render);
+    });
   });
 
   // ---------- estado de conexión ----------
@@ -2893,6 +3303,7 @@
     renderTeamEvoChart();
     renderCoursesTable();
     renderAdmin();
+    renderRyder();
     renderImportAsSelector();
     maybeAutoOnboard();
   }
