@@ -1346,7 +1346,14 @@
     var courseName = $('#rf-course').value;
     var teeColor = $('#rf-tee').value;
     if(!pid || !courseName || !teeColor) return;
-    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor; });
+    // !t.hidden aquí también, no solo en populateTeeSelect: si dos barras del catálogo comparten
+    // campo+color (una vigente y otra oculta por obsoleta), esta búsqueda debe resolver siempre
+    // a la misma que se ofreció en el desplegable — de lo contrario, un navegador con la lista
+    // de barras en otro orden podría calcular la ronda con los números de la barra oculta aunque
+    // el desplegable solo mostrara la vigente (esto es justo lo que pasó el 25/8/2026 con varias
+    // rondas de Entrepinos metidas desde una pestaña que aún tenía la versión anterior del código
+    // sin este filtro — ver decisiones del proyecto).
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
     if(!tee) return;
     var hci = currentHCIFor(pid);
     var ch = courseHandicap(hci, tee.sr, tee.cr, tee.par);
@@ -1386,7 +1393,14 @@
     var courseName = $('#rf-course').value, teeColor = $('#rf-tee').value;
     var hcp = parseFloat($('#rf-hcp').value);
     var pts = getStablefordPoints();
-    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor; });
+    // !t.hidden aquí también, no solo en populateTeeSelect: si dos barras del catálogo comparten
+    // campo+color (una vigente y otra oculta por obsoleta), esta búsqueda debe resolver siempre
+    // a la misma que se ofreció en el desplegable — de lo contrario, un navegador con la lista
+    // de barras en otro orden podría calcular la ronda con los números de la barra oculta aunque
+    // el desplegable solo mostrara la vigente (esto es justo lo que pasó el 25/8/2026 con varias
+    // rondas de Entrepinos metidas desde una pestaña que aún tenía la versión anterior del código
+    // sin este filtro — ver decisiones del proyecto).
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
     var box = $('#rf-preview');
     if(!tee || isNaN(hcp) || isNaN(pts)){ box.hidden = true; return; }
     var adjScore = tee.par + 36 - pts + hcp;
@@ -1413,7 +1427,14 @@
     var date = $('#rf-date').value;
     var hcp = parseFloat($('#rf-hcp').value);
     var pts = getStablefordPoints();
-    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor; });
+    // !t.hidden aquí también, no solo en populateTeeSelect: si dos barras del catálogo comparten
+    // campo+color (una vigente y otra oculta por obsoleta), esta búsqueda debe resolver siempre
+    // a la misma que se ofreció en el desplegable — de lo contrario, un navegador con la lista
+    // de barras en otro orden podría calcular la ronda con los números de la barra oculta aunque
+    // el desplegable solo mostrara la vigente (esto es justo lo que pasó el 25/8/2026 con varias
+    // rondas de Entrepinos metidas desde una pestaña que aún tenía la versión anterior del código
+    // sin este filtro — ver decisiones del proyecto).
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
     if(!pid || !players().some(function(p){return p.id===pid;})){ openOnboard(); return; }
     if(!tee || !date || isNaN(hcp) || isNaN(pts)) return;
 
