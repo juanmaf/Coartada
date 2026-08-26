@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <title>Liga de Hándicap</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Icono al añadir la web a la pantalla de inicio del móvil (Android/Chrome usa el manifest;
+     iOS/Safari ignora el manifest para el icono y necesita su propio apple-touch-icon) —
+     pedido el 26/8/2026. Los ficheros se generaron a partir de los colores de marca de la app
+     (verde --fairway, bandera en --accent, bola en tono crema), no hace falta subir nada aparte. -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#1f5c43">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Liga HCP">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
   :root{
@@ -879,7 +892,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-26.1";
+  var APP_VERSION = "2026-08-26.2";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };

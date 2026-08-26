@@ -45,11 +45,13 @@ Con esto, tu base de datos ya existe y sabe aceptar conexiones desde tu web.
    - Puede ser público (necesario para GitHub Pages gratis) — no contiene ningún dato
      sensible, solo el código de la página; los datos de las rondas viven en Firebase,
      no en este repositorio.
-2. Sube estos 4 ficheros al repositorio (botón **"Add file" → "Upload files"**,
-   arrastrándolos):
+2. Sube estos ficheros al repositorio (botón **"Add file" → "Upload files"**,
+   arrastrándolos todos juntos):
    - `index.html`
    - `seed-data.js`
    - `firebase-config.js` (con tus valores ya rellenados del paso anterior)
+   - `manifest.webmanifest`, `favicon.ico`, `icon-192.png`, `icon-512.png`,
+     `icon-512-maskable.png` y `apple-touch-icon.png` (el icono de la app — ver más abajo)
    - (el fichero `firestore.rules` no se sube aquí, es solo para pegar en Firebase)
 3. Ve a **"Settings" → "Pages"** (menú de la izquierda del repositorio).
    - En "Source", elige **"Deploy from a branch"**.
@@ -63,6 +65,24 @@ Con esto, tu base de datos ya existe y sabe aceptar conexiones desde tu web.
    Ese es el enlace definitivo para compartir con todo el grupo. Funciona en
    cualquier navegador, móvil o cuenta — no depende de Claude.
 
+## El icono al añadir la web a la pantalla de inicio del móvil
+
+Desde el 26/8/2026, la página lleva su propio icono (una bandera de golf sobre fondo verde,
+a juego con los colores de la app) para cuando alguien la añade a la pantalla de inicio del
+móvil en vez de dejarla como una pestaña más del navegador:
+
+- **Android / Chrome**: al entrar en la web, el navegador suele ofrecer solo "Instalar
+  app" o, en el menú (⋮), "Añadir a pantalla de inicio" — aparece ya con este icono.
+- **iPhone / Safari**: menú compartir (el icono del cuadrado con la flecha hacia arriba) →
+  "Añadir a pantalla de inicio". Verás el mismo icono en la vista previa antes de confirmar.
+
+No hace falta ninguna configuración adicional: basta con que los 6 ficheros de icono
+(`manifest.webmanifest`, `favicon.ico`, `icon-192.png`, `icon-512.png`,
+`icon-512-maskable.png`, `apple-touch-icon.png`) estén subidos junto a `index.html` en el
+mismo repositorio (paso 2 de la Parte 2). Si en el futuro quieres cambiar el diseño del
+icono, basta con generar de nuevo esos mismos 6 ficheros (mismos nombres y tamaños) y
+volver a subirlos — no hace falta tocar nada más en `index.html`.
+
 ## Primer uso
 
 La primera vez que alguien abra el enlace con la base de datos vacía, la app carga
@@ -75,12 +95,53 @@ pestaña Admin si quieres). Como novedad, cuando entras en modo administrador, e
 importador de CSV te deja elegir **para qué jugador** se importa cada historial — útil
 para cargar el histórico de varios amigos reales de una vez, no solo el tuyo.
 
+Desde el 25/8/2026, entrar con el PIN de administrador también hace aparecer una
+pestaña **Ryder** más en el menú (solo la ves tú, mientras tengas el PIN metido en ese
+dispositivo/navegador) para preparar la Ryder Pucela Cup: monta los dos equipos con
+jugadores de la app (su hándicap sube solo del ranking) o invitados sueltos con
+hándicap a mano, mete el CR/Slope/Par del campo del torneo, y la app calcula el
+hándicap de juego de cada uno y los golpes concedidos en Fourball, Foursome, Greensome
+e Individual — los porcentajes de cada formato son editables. Es solo la calculadora de
+emparejamientos (como el Excel que preparabais a mano); anotar resultados hoyo a hoyo y
+una clasificación en directo queda para una futura actualización.
+
 ## Actualizar la web más adelante
 
 Si en el futuro quieres cambiar algo del código (`index.html`), basta con subir la
 nueva versión del fichero a GitHub (sustituyendo al anterior) — GitHub Pages la
 publica sola en un par de minutos. Los datos (jugadores, rondas, campos) no se ven
 afectados, porque viven en Firebase, no en el fichero.
+
+Desde agosto de 2026, `index.html` comprueba solo (cada pocos minutos y al volver a
+la pestaña) si hay una versión más nueva publicada, y se recarga sola cuando no hay
+nada sin guardar en el formulario de ronda — para evitar que un dispositivo se quede
+con código viejo abierto y calcule algo mal, como pasó una vez con Entrepinos. Esto
+funciona comparando la constante `APP_VERSION` de dentro del fichero: **si subes tú
+mismo/a un cambio a `index.html` sin pasar por mí, acuérdate de cambiar esa línea**
+(por ejemplo a la fecha del día) para que los demás dispositivos detecten que hay
+algo nuevo.
+
+## Las reglas de Firestore (`firestore.rules`) también pueden cambiar
+
+Si alguna vez sustituyo o amplío `firestore.rules`, hay que volver a copiar su
+contenido completo en Firebase → Firestore Database → Reglas → pegar → Publicar
+(paso 4 de la Parte 1). No pasa nada si no lo haces enseguida — mientras tanto
+seguirán activas las reglas anteriores — pero conviene no dejarlo pasar mucho si el
+cambio es por seguridad.
+
+## Sobre el aviso de "secreto expuesto" de GitHub
+
+Si subes este repositorio a GitHub y te avisa de un "possible secret" en
+`firebase-config.js`, es el valor `apiKey`. No es un fallo ni hay que sacarlo del
+código: las claves web de Firebase están pensadas para ir en el navegador de quien
+use la app (así funciona cualquier web con Firebase, no solo esta), y por sí sola no
+da acceso a nada — quien de verdad decide qué se puede leer y escribir son las
+reglas de Firestore (`firestore.rules`). Puedes marcar ese aviso en GitHub como "Used
+in tests" / "Revisado, no es sensible" sin miedo. Si aun así quieres reducir su
+utilidad fuera de esta web, puedes ir a Google Cloud Console → APIs y servicios →
+Credenciales, abrir esa clave y restringirla por "Referentes HTTP" a tu dominio de
+GitHub Pages (`https://TU-USUARIO.github.io/*`) — así, aunque alguien la copie, no
+podrá usarla desde otro sitio.
 
 ## Si algo no carga
 
