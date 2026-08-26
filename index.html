@@ -226,6 +226,11 @@
   .stat-tile .label{ font-size:12px; color:var(--muted); }
   .stat-tile .value{ font-size:28px; font-weight:600; font-family:"Fraunces",serif; }
 
+  /* "Tu hándicap" arriba de Ranking y Evolución — pensado para verse sin desplazar nada,
+     sobre todo en móvil, que es donde cada jugador va a mirar más su propio dato. */
+  .my-hcp-card{ text-align:center; background:var(--fairway-wash); border-color:var(--line-strong); }
+  .my-hcp-card .my-hcp-value{ font-size:40px; font-weight:600; font-family:"Fraunces",serif; line-height:1.15; color:var(--fairway); }
+
   .kv{ display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed var(--line); }
   .kv:last-child{ border-bottom:none; }
 
@@ -321,6 +326,11 @@
     <!-- RANKING -->
     <section class="view" id="view-ranking">
       <div class="stack">
+        <div class="card my-hcp-card">
+          <span style="font-size:12px;color:var(--muted);">Tu hándicap</span>
+          <div class="my-hcp-value">–</div>
+          <p class="my-hcp-sub hint" style="margin:2px 0 0;"></p>
+        </div>
         <div class="banner info">
           Ranking informativo por hándicap WHS actual. No decide nada por sí solo — es para presumir o para llorar, según toque.
         </div>
@@ -468,6 +478,11 @@
           <div class="row" style="gap:10px;flex-wrap:wrap;align-items:flex-end;">
             <div class="field" style="margin:0;flex:1 1 160px;"><label for="rf2Player">Jugador</label><select id="rf2Player"><option value="">Todos</option></select></div>
             <div class="field" style="margin:0;flex:1 1 200px;"><label for="rf2Course">Campo</label><select id="rf2Course"><option value="">Todos</option></select></div>
+            <div class="row" style="gap:6px;">
+              <button type="button" class="btn small" data-rondas-range="all">Todo</button>
+              <button type="button" class="btn small" data-rondas-range="1y">Último año</button>
+              <button type="button" class="btn small" data-rondas-range="ytd">Este año</button>
+            </div>
             <div class="field" style="margin:0;flex:0 0 145px;"><label for="rf2From">Desde</label><input type="date" id="rf2From"></div>
             <div class="field" style="margin:0;flex:0 0 145px;"><label for="rf2To">Hasta</label><input type="date" id="rf2To"></div>
             <div class="field" style="margin:0;flex:0 0 150px;"><label for="rf2Temp">Temperatura</label>
@@ -486,8 +501,9 @@
 
         <div class="card">
           <div class="section-head">
-            <div><h2>Rondas registradas</h2><p>Las tuyas siempre se ven; las de los demás solo una vez aprobadas. La tabla respeta los filtros de arriba.</p></div>
+            <div><h2>Rondas registradas</h2><p>Las tuyas siempre se ven; las de los demás solo una vez aprobadas. Por defecto se muestran tus últimas 20 — usa los botones de periodo o los filtros de arriba para ver más.</p></div>
           </div>
+          <p id="roundsCapHint" class="hint" style="display:none;margin:0 0 10px;"></p>
           <div class="table-wrap"><table class="data" id="roundsTable">
             <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th>Barra</th><th class="num">HCP juego</th><th class="num">Stableford</th><th class="num">Diferencial</th><th>Clima</th><th>Estado</th><th></th></tr></thead>
             <tbody></tbody>
@@ -499,6 +515,11 @@
     <!-- EVOLUCIÓN -->
     <section class="view" id="view-evolucion">
       <div class="stack">
+        <div class="card my-hcp-card">
+          <span style="font-size:12px;color:var(--muted);">Tu hándicap</span>
+          <div class="my-hcp-value">–</div>
+          <p class="my-hcp-sub hint" style="margin:2px 0 0;"></p>
+        </div>
         <div class="row">
           <div class="card" style="flex:0 0 220px;">
             <h2 style="font-size:16px;margin-bottom:8px;">Comparar jugadores</h2>
@@ -858,7 +879,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-25.4";
+  var APP_VERSION = "2026-08-26.1";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1459,6 +1480,28 @@
     showView(btn.dataset.view);
   });
 
+  // ---------- "Tu hándicap" (Ranking y Evolución) ----------
+  // Mismo bloque repetido arriba de las dos vistas (misma clase, `.my-hcp-value`/`.my-hcp-sub`)
+  // para que cada jugador vea su propio dato sin tener que buscarlo en la tabla — pedido
+  // explícitamente para que se note sobre todo desde el móvil.
+  function renderMyHcpBanner(){
+    var id = myId();
+    var me = players().find(function(p){ return p.id===id; });
+    var values = $all('.my-hcp-value'), subs = $all('.my-hcp-sub');
+    if(!me){
+      values.forEach(function(el){ el.textContent = '–'; });
+      subs.forEach(function(el){ el.textContent = 'Identifícate arriba para ver tu hándicap.'; });
+      return;
+    }
+    var hci = currentHCIFor(id);
+    var n = approvedRoundsFor(id).length;
+    values.forEach(function(el){ el.innerHTML = trendBadge(id) + (hci==null ? '—' : hci.toFixed(1)); });
+    var subText = hci==null
+      ? ('Aún sin hándicap calculado — hacen falta al menos 3 rondas aprobadas (llevas '+n+').')
+      : ('Con tus últimas '+Math.min(n,20)+' rondas aprobadas, de '+n+' en total.');
+    subs.forEach(function(el){ el.textContent = subText; });
+  }
+
   // ---------- Ranking view ----------
   // "Ver a fecha": cuando tiene valor, la clasificación se recalcula tal y como estaba
   // ese día (solo con las rondas aprobadas hasta esa fecha), en vez de con el estado actual.
@@ -1997,7 +2040,20 @@
   // variables influyen más en los resultados"). Los cubos de clima son deliberadamente
   // simples (temperatura/lluvia/viento en 2-3 franjas cada uno) para que las comparaciones
   // salgan con suficiente tamaño de muestra; no es un análisis estadístico, es un vistazo.
-  var roundsFilter = { player: '', course: '', from: '', to: '', temp: '', rain: '', wind: '' };
+  var roundsFilter = { player: '', course: '', from: '', to: '', temp: '', rain: '', wind: '', periodChosen: false };
+  // Por defecto, Rondas solo muestra las últimas 20 del jugador identificado en este
+  // dispositivo — el histórico completo puede tener miles de filas y la mayoría de la gente
+  // solo quiere ver "las mías" (pedido el 26/8/2026). En cuanto se sabe quién es (myId()),
+  // se aplica una sola vez; si el usuario cambia el filtro de jugador a mano después, se
+  // respeta su elección y no se vuelve a forzar.
+  var roundsFilterDefaulted = false;
+  function applyRoundsDefaultOnce(){
+    if(roundsFilterDefaulted) return;
+    var id = myId();
+    if(!id) return;
+    roundsFilterDefaulted = true;
+    roundsFilter.player = id;
+  }
   function tempBucket(w){ if(!w || typeof w.tmax !== 'number') return null; return w.tmax < 15 ? 'frio' : (w.tmax > 28 ? 'calor' : 'templado'); }
   function rainBucket(w){ if(!w || typeof w.precip !== 'number') return null; return w.precip >= 1 ? 'si' : 'no'; }
   function windBucket(w){ if(!w || typeof w.windMax !== 'number') return null; return w.windMax >= 30 ? 'fuerte' : 'normal'; }
@@ -2012,14 +2068,17 @@
     return true;
   }
   function renderRoundsFilterControls(){
+    // El <select> siempre refleja roundsFilter (la fuente de verdad), no su propio valor
+    // anterior — si no, el valor por defecto ("mis últimas 20") se aplicaba de puertas para
+    // adentro pero el desplegable seguía mostrando "Todos", confundiendo a quien mirase.
     var ps = players().slice().sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
-    var playerSel = $('#rf2Player'), keepP = playerSel.value;
+    var playerSel = $('#rf2Player');
     playerSel.innerHTML = '<option value="">Todos</option>' + ps.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
-    playerSel.value = keepP;
-    var courseSel = $('#rf2Course'), keepC = courseSel.value;
+    playerSel.value = roundsFilter.player;
+    var courseSel = $('#rf2Course');
     var names = courseNames().slice().sort(function(a,b){ return a.localeCompare(b,'es'); });
     courseSel.innerHTML = '<option value="">Todos</option>' + names.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
-    courseSel.value = keepC;
+    courseSel.value = roundsFilter.course;
   }
   ['#rf2Player','#rf2Course','#rf2From','#rf2To','#rf2Temp','#rf2Rain','#rf2Wind'].forEach(function(sel){
     $(sel).addEventListener('change', function(){
@@ -2030,12 +2089,31 @@
       roundsFilter.temp = $('#rf2Temp').value;
       roundsFilter.rain = $('#rf2Rain').value;
       roundsFilter.wind = $('#rf2Wind').value;
+      // Tocar las fechas a mano cuenta como "ya elegí periodo": se levanta el tope de 20.
+      if(sel === '#rf2From' || sel === '#rf2To') roundsFilter.periodChosen = true;
       renderRoundsFeed();
     });
   });
+  // Mismo patrón que en Evolución (applyEvoRangePreset / data-evo-range): "Todo"/"Último
+  // año"/"Este año" son accesos rápidos que rellenan Desde/Hasta y marcan el periodo como
+  // elegido, para que se vean más de las 20 rondas por defecto.
+  function applyRoundsRangePreset(mode){
+    var today = todayIso();
+    if(mode === 'all'){ roundsFilter.from = ''; roundsFilter.to = ''; }
+    else if(mode === '1y'){ roundsFilter.from = isoDateNDaysAgo(365); roundsFilter.to = today; }
+    else if(mode === 'ytd'){ roundsFilter.from = today.slice(0,4)+'-01-01'; roundsFilter.to = today; }
+    roundsFilter.periodChosen = true;
+    $('#rf2From').value = roundsFilter.from || '';
+    $('#rf2To').value = roundsFilter.to || '';
+    renderRoundsFeed();
+  }
+  $all('[data-rondas-range]').forEach(function(btn){
+    btn.addEventListener('click', function(){ applyRoundsRangePreset(btn.getAttribute('data-rondas-range')); });
+  });
   $('#rf2Clear').addEventListener('click', function(){
-    roundsFilter = { player:'', course:'', from:'', to:'', temp:'', rain:'', wind:'' };
-    ['#rf2Player','#rf2Course','#rf2From','#rf2To','#rf2Temp','#rf2Rain','#rf2Wind'].forEach(function(sel){ $(sel).value = ''; });
+    roundsFilter = { player: myId()||'', course:'', from:'', to:'', temp:'', rain:'', wind:'', periodChosen:false };
+    $('#rf2Player').value = roundsFilter.player;
+    ['#rf2Course','#rf2From','#rf2To','#rf2Temp','#rf2Rain','#rf2Wind'].forEach(function(sel){ $(sel).value = ''; });
     renderRoundsFeed();
   });
   function avgDiff(list){ return list.length ? round1(list.reduce(function(s,r){ return s+r.differential; },0)/list.length) : null; }
@@ -2068,16 +2146,26 @@
   }
 
   function renderRoundsFeed(){
+    applyRoundsDefaultOnce();
     var id = myId();
     var admin = adminUnlocked;
     var rs = rounds().slice().sort(cmpDateDesc);
     var visible = rs.filter(function(r){ return r.status==='aprobada' || r.player===id || admin; });
     renderRoundsFilterControls();
     var filtered = visible.filter(passesRoundsFilter);
+    // Los subtotales usan siempre la selección completa (no el tope de 20) para que la
+    // comparativa por clima tenga una muestra decente; el tope solo afecta a la tabla.
     renderRoundsSubtotals(filtered);
+    var capHint = $('#roundsCapHint');
+    var capped = !roundsFilter.periodChosen && filtered.length > 20;
+    var shown = capped ? filtered.slice(0, 20) : filtered;
+    if(capHint){
+      capHint.style.display = capped ? '' : 'none';
+      if(capped) capHint.textContent = 'Mostrando las últimas 20 de '+filtered.length+' rondas que coinciden con los filtros — usa "Todo", "Último año" o "Este año" para ver más.';
+    }
     var tbody = $('#roundsTable tbody');
-    if(filtered.length===0){ tbody.innerHTML = '<tr><td colspan="10" class="empty">Ninguna ronda coincide con los filtros de arriba.</td></tr>'; return; }
-    tbody.innerHTML = filtered.map(function(r){
+    if(shown.length===0){ tbody.innerHTML = '<tr><td colspan="10" class="empty">Ninguna ronda coincide con los filtros de arriba.</td></tr>'; return; }
+    tbody.innerHTML = shown.map(function(r){
       var pill = r.status==='aprobada' ? '<span class="pill good">Aprobada</span>' : '<span class="pill warning">Pendiente</span>';
       var canDelete = (r.player === id) || admin;
       var delCell = canDelete ? '<button class="btn small danger" data-del-round="'+esc(r.id)+'">Borrar</button>' : '';
@@ -3360,6 +3448,7 @@
     // "repoblarlo" en cada render como antes con el <select> plano.
     populateTeeSelect($('#rf-course').value);
     updateSuggestedHcp();
+    renderMyHcpBanner();
     renderRanking();
     renderRoundsFeed();
     renderMyHandicapRounds();
