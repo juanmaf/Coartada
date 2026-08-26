@@ -892,7 +892,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-26.2";
+  var APP_VERSION = "2026-08-26.3";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1142,7 +1142,13 @@
     if(a === b) return true;
     if(a.length>=4 && b.length>=4 && (a.indexOf(b)!==-1 || b.indexOf(a)!==-1)) return true;
     var ta = significantTokens(a), tb = significantTokens(b);
-    if(ta.length===0 || tb.length===0) return false;
+    // Antes bastaba con UNA palabra significativa compartida — eso disparaba falsos positivos
+    // reales encontrados el 26/8/2026 (p.ej. "Los Lagos" ↔ cualquier otro campo cuyo recorrido
+    // interno también se llame "Lagos", o "Alicante Golf" ↔ "Villamartin Alicante", que solo
+    // comparten el nombre de la provincia). Con al menos dos palabras compartidas, "Aldeamayor
+    // Golf" sigue reconociendo a "Aldeamayor Club de Golf" sin problema, pero una sola coincidencia
+    // suelta ya no basta.
+    if(ta.length<2 || tb.length<2) return false;
     var shorter = ta.length<=tb.length ? ta : tb;
     var longerSet = {};
     (ta.length<=tb.length ? tb : ta).forEach(function(w){ longerSet[w]=true; });
@@ -1192,6 +1198,55 @@
       }
     }
     return pairs;
+  }
+  // Cuántas rondas reales usan cada nombre de campo tal cual está escrito — es la señal que de
+  // verdad importa para priorizar: una base con años de historial suele acumular, junto a los
+  // campos donde el grupo ha jugado de verdad, cientos de campos de una tabla de referencia
+  // (CR/Slope oficiales) que nunca se han llegado a usar en ninguna ronda.
+  function courseRoundCounts(){
+    var counts = {};
+    rounds().forEach(function(r){ counts[r.course] = (counts[r.course]||0) + 1; });
+    return counts;
+  }
+  // Agrupa los pares de `findPossibleDuplicateCoursePairs` en racimos (un mismo club puede tener
+  // 3, 4 o más variantes de nombre enlazadas entre sí, y sin agrupar eso son C(n,2) líneas para
+  // una sola decisión real) y los ordena por cuántas rondas reales usan alguno de sus nombres —
+  // pedido el 26/8/2026 tras ver que la mayoría de los avisos no correspondían a ningún error de
+  // verdad, solo a la tabla de referencia de campos sin jugar. Cada grupo lleva una `key` estable
+  // (los nombres ordenados) para poder descartarlo permanentemente con `ignoreDupeGroup`.
+  function findPossibleDuplicateCourseGroups(){
+    var pairs = findPossibleDuplicateCoursePairs();
+    var parent = {};
+    function find(x){ if(!(x in parent)) parent[x] = x; while(parent[x]!==x){ x = parent[x]; } return x; }
+    function union(a,b){ var ra=find(a), rb=find(b); if(ra!==rb) parent[ra]=rb; }
+    pairs.forEach(function(p){ union(p[0], p[1]); });
+    var counts = courseRoundCounts();
+    var groupsByRoot = {};
+    Object.keys(parent).forEach(function(name){
+      var root = find(name);
+      (groupsByRoot[root] = groupsByRoot[root] || []).push(name);
+    });
+    return Object.keys(groupsByRoot).map(function(root){
+      var sortedNames = groupsByRoot[root].slice().sort();
+      var items = sortedNames.map(function(n){ return { name: n, rounds: counts[n]||0 }; })
+        .sort(function(a,b){ return b.rounds - a.rounds; });
+      var totalRounds = items.reduce(function(s,it){ return s + it.rounds; }, 0);
+      return { key: sortedNames.join(''), items: items, rounds: totalRounds };
+    }).sort(function(a,b){ return b.rounds - a.rounds; });
+  }
+  // Descartes de "esto no es el mismo campo" — a propósito solo en este dispositivo (no en
+  // Firestore, para no tener que tocar firestore.rules por esto): es una ayuda de repaso para
+  // quien esté en el PIN de admin en este navegador, no un dato compartido del grupo.
+  var IGNORED_COURSE_DUPES_KEY = 'hcpApp:ignoredCourseDupeGroups';
+  function ignoredDupeGroupKeys(){
+    try{ return JSON.parse(localStorage.getItem(IGNORED_COURSE_DUPES_KEY) || '[]'); }catch(e){ return []; }
+  }
+  function ignoreDupeGroup(key){
+    var list = ignoredDupeGroupKeys();
+    if(list.indexOf(key)===-1){
+      list.push(key);
+      try{ localStorage.setItem(IGNORED_COURSE_DUPES_KEY, JSON.stringify(list)); }catch(e){}
+    }
   }
   // ---------- Clima del día jugado (Open-Meteo, sin API key) ----------
   // Cada ronda nueva intenta anotar, en segundo plano y sin bloquear el guardado, el tiempo
@@ -2938,6 +2993,51 @@
     StoreOps.batchApproveRounds(ids).then(render);
   });
 
+  // Solo dura mientras dure esta sesión de repaso en este dispositivo — no tiene sentido
+  // recordarlo entre visitas, y así el valor por defecto (ocultos) es el más seguro.
+  var dupeShowUnplayed = false;
+  function renderCourseDupeHints(){
+    var box = $('#adminDupeHint');
+    var ignored = ignoredDupeGroupKeys();
+    var groups = findPossibleDuplicateCourseGroups().filter(function(g){ return ignored.indexOf(g.key)===-1; });
+    if(groups.length===0){ box.innerHTML = '<p class="hint">No hay campos que parezcan duplicados ahora mismo.</p>'; return; }
+    var withRounds = groups.filter(function(g){ return g.rounds>0; });
+    var withoutRounds = groups.filter(function(g){ return g.rounds===0; });
+    var shown = dupeShowUnplayed ? groups : withRounds;
+    var toggleLine = withoutRounds.length===0 ? '' :
+      '<p class="hint" style="margin:8px 0 0;"><a href="#" id="dupeToggleUnplayed">'+
+      (dupeShowUnplayed ? 'Ocultar' : 'Mostrar también')+' los '+withoutRounds.length+' que nunca se han jugado</a></p>';
+    if(shown.length===0){
+      box.innerHTML = '<p class="hint">Ningún campo con rondas reales parece duplicado ahora mismo — el resto son campos de la base de referencia que nadie ha jugado todavía.</p>' + toggleLine;
+    } else {
+      box.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;line-height:1.6;">' +
+          '<strong>Posibles duplicados</strong> — revisa si son el mismo club antes de borrar uno. Se muestran primero los que de verdad tienen rondas registradas.' +
+        '</div>' +
+        shown.map(function(g){
+          var namesHtml = g.items.map(function(it){
+            return '· '+esc(it.name)+' <span class="hint">('+(it.rounds>0 ? (it.rounds+' ronda'+(it.rounds===1?'':'s')) : 'sin rondas')+')</span>';
+          }).join('<br>');
+          return '<div class="card" style="margin-top:8px;padding:10px 12px;">' + namesHtml +
+            '<div style="margin-top:8px;"><button type="button" class="btn small" data-ignore-dupe="'+esc(g.key)+'">No es el mismo campo, no avisar más</button></div>' +
+            '</div>';
+        }).join('') + toggleLine;
+    }
+    var toggleLink = $('#dupeToggleUnplayed');
+    if(toggleLink){
+      toggleLink.addEventListener('click', function(ev){
+        ev.preventDefault();
+        dupeShowUnplayed = !dupeShowUnplayed;
+        renderCourseDupeHints();
+      });
+    }
+    $all('[data-ignore-dupe]', box).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        ignoreDupeGroup(btn.getAttribute('data-ignore-dupe'));
+        renderCourseDupeHints();
+      });
+    });
+  }
+
   function renderAdmin(){
     if(!adminUnlocked){ $('#adminLocked').hidden=false; $('#adminUnlocked').hidden=true; return; }
     $('#adminLocked').hidden = true; $('#adminUnlocked').hidden = false;
@@ -2966,16 +3066,7 @@
       });
     }
 
-    var dupePairs = findPossibleDuplicateCoursePairs();
-    var dupeBox = $('#adminDupeHint');
-    if(dupePairs.length===0){
-      dupeBox.innerHTML = '';
-    } else {
-      dupeBox.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;line-height:1.6;">' +
-        '<strong>Posibles duplicados</strong> (nombres parecidos, revisa si son el mismo club antes de borrar uno):<br>' +
-        dupePairs.map(function(p){ return '· '+esc(p[0])+' ↔ '+esc(p[1]); }).join('<br>') +
-        '</div>';
-    }
+    renderCourseDupeHints();
 
     var cTbody = $('#adminCoursesTable tbody');
     var names = courseNames();
