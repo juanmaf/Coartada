@@ -726,9 +726,10 @@
                 <div class="field"><label for="rdDates">Fechas</label><input type="text" id="rdDates" placeholder="19-20 septiembre 2026"></div>
               </div>
               <div class="grid2">
-                <div class="field"><label for="rdTeamA">Nombre equipo A</label><input type="text" id="rdTeamA" placeholder="Pichones"></div>
-                <div class="field"><label for="rdTeamB">Nombre equipo B</label><input type="text" id="rdTeamB" placeholder="Ardillas"></div>
+                <div class="field"><label for="rdTeamRefA">Equipo A</label><select id="rdTeamRefA"></select></div>
+                <div class="field"><label for="rdTeamRefB">Equipo B</label><select id="rdTeamRefB"></select></div>
               </div>
+              <p class="hint" style="margin:-6px 0 12px;">Los equipos son los que ya existen en la pestaña Equipos. Los jugadores de la app se añaden solos según su equipo ahí — debajo solo hace falta añadir a los invitados que no usan la app (o a algún jugador de la app sin equipo asignado).</p>
               <label>Barra del campo del torneo</label>
               <div class="grid3">
                 <div class="field"><label for="rdPar">Par</label><input type="number" id="rdPar" step="1"></div>
@@ -857,7 +858,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-25.3";
+  var APP_VERSION = "2026-08-25.4";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -2987,10 +2988,17 @@
   function cap1(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
   function ryder(){
     var r = Store.ryder || {};
+    var teamRefs = Object.assign({ a: null, b: null }, r.teamRefs || {});
+    function nameFor(side){
+      var t = teams().find(function(x){ return x.id===teamRefs[side]; });
+      return t ? t.name : ('Equipo ' + side.toUpperCase());
+    }
     return {
       eventName: r.eventName || '',
       dates: r.dates || '',
-      teamNames: Object.assign({ a: 'Equipo A', b: 'Equipo B' }, r.teamNames || {}),
+      teamRefs: teamRefs,
+      teamNames: { a: nameFor('a'), b: nameFor('b') },
+      excludedPlayerIds: r.excludedPlayerIds || [],
       tee: Object.assign({ par: 72, cr: 72, sr: 113 }, r.tee || {}),
       allowances: Object.assign({ fourball: 0.75, foursome: 0.5, greensomeLow: 0.6, greensomeHigh: 0.4, individual: 0.75 }, r.allowances || {}),
       roster: r.roster || [],
@@ -3000,8 +3008,21 @@
   function ryderEntryName(e){ return e.source==='player' ? pname(e.playerId) : (e.name || '—'); }
   function ryderEntryHci(e){ return e.source==='player' ? currentHCIFor(e.playerId) : ((typeof e.manualHci==='number') ? e.manualHci : null); }
   function ryderEntryCourseHcp(e, tee){ var hci = ryderEntryHci(e); return hci==null ? null : courseHandicap(hci, tee.sr, tee.cr, tee.par); }
-  // Si se quita a alguien del roster, cualquier pareja/partido de cualquier formato que lo
-  // tuviera puesto se borra entera (mejor eso que dejar una referencia a un jugador fantasma).
+  // Un lado del cuadro junta, sin duplicados: los jugadores de la app que ya tienen ese
+  // equipo asignado en la pestaña Equipos (salvo que se hayan excluido de esta Ryder en
+  // concreto) más las altas manuales guardadas en `roster` — invitados que no usan la app, o
+  // algún jugador de la app añadido a mano (p. ej. sin equipo asignado todavía en Equipos).
+  function ryderTeamMembers(side, rd){
+    var teamId = rd.teamRefs[side];
+    var auto = teamId ? players().filter(function(p){ return p.team===teamId && rd.excludedPlayerIds.indexOf(p.id)===-1; }) : [];
+    var autoEntries = auto.map(function(p){ return { id:'auto_'+p.id, team:side, source:'player', playerId:p.id, auto:true }; });
+    var manual = rd.roster.filter(function(e){ return e.team===side; });
+    return autoEntries.concat(manual);
+  }
+  function ryderAllMembers(rd){ return ryderTeamMembers('a', rd).concat(ryderTeamMembers('b', rd)); }
+  // Si se quita a alguien del cuadro (borrado manual o exclusión de alguien del equipo de
+  // Equipos), cualquier pareja/partido de cualquier formato que lo tuviera puesto se borra
+  // entera (mejor eso que dejar una referencia a un jugador fantasma).
   function ryderStripFromPairings(pairings, rid){
     function refs(p){ return [].concat(Array.isArray(p.a)?p.a:[p.a], Array.isArray(p.b)?p.b:[p.b]); }
     var out = {};
@@ -3045,8 +3066,6 @@
   function renderRyderSettings(rd){
     setValIfNotFocused('#rdName', rd.eventName);
     setValIfNotFocused('#rdDates', rd.dates);
-    setValIfNotFocused('#rdTeamA', rd.teamNames.a);
-    setValIfNotFocused('#rdTeamB', rd.teamNames.b);
     setValIfNotFocused('#rdPar', rd.tee.par);
     setValIfNotFocused('#rdCr', rd.tee.cr);
     setValIfNotFocused('#rdSr', rd.tee.sr);
@@ -3058,8 +3077,20 @@
     $('#ryderTeamLabelA').textContent = rd.teamNames.a;
     $('#ryderTeamLabelB').textContent = rd.teamNames.b;
   }
+  function renderRyderTeamRefSelects(rd){
+    var ts = teams();
+    ['a','b'].forEach(function(side){
+      var other = side==='a' ? rd.teamRefs.b : rd.teamRefs.a;
+      var avail = ts.filter(function(t){ return t.id!==other; });
+      var sel = $('#rdTeamRef'+side.toUpperCase());
+      var keep = document.activeElement===sel ? sel.value : (rd.teamRefs[side] || '');
+      sel.innerHTML = '<option value="">Elige equipo…</option>' + avail.map(function(t){
+        return '<option value="'+esc(t.id)+'" '+(t.id===keep?'selected':'')+'>'+esc(t.name)+'</option>';
+      }).join('');
+    });
+  }
   function renderRyderAddPlayerSelect(team, rd){
-    var used = rd.roster.filter(function(e){ return e.source==='player'; }).map(function(e){ return e.playerId; });
+    var used = ryderAllMembers(rd).filter(function(e){ return e.source==='player'; }).map(function(e){ return e.playerId; });
     var avail = players().filter(function(p){ return used.indexOf(p.id)===-1; }).sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
     var sel = $('#ryderAddPlayer'+team.toUpperCase());
     var keep = sel.value;
@@ -3067,17 +3098,32 @@
     if(avail.some(function(p){ return p.id===keep; })) sel.value = keep;
   }
   function renderRyderRosterCol(team, rd){
-    var list = rd.roster.filter(function(e){ return e.team===team; });
+    var list = ryderTeamMembers(team, rd);
     var wrap = $('#ryderRosterList'+team.toUpperCase());
-    if(list.length===0){ wrap.innerHTML = '<p class="empty">Sin jugadores todavía.</p>'; return; }
-    wrap.innerHTML = '<div class="table-wrap"><table class="data"><thead><tr><th>Jugador</th><th class="num">HCI</th><th class="num">Hcp juego</th><th></th></tr></thead><tbody>' +
-      list.map(function(e){
-        var hci = ryderEntryHci(e);
-        var chcp = ryderEntryCourseHcp(e, rd.tee);
-        var badge = e.source==='manual' ? ' <span class="pill muted">invitado</span>' : '';
-        return '<tr><td>'+esc(ryderEntryName(e))+badge+'</td><td class="num">'+(hci==null?'—':hci.toFixed(1))+'</td><td class="num">'+(chcp==null?'—':chcp)+'</td>' +
-          '<td><button type="button" class="btn small danger" data-ryder-del-roster="'+esc(e.id)+'">Quitar</button></td></tr>';
-      }).join('') + '</tbody></table></div>';
+    var teamId = rd.teamRefs[team];
+    var excluded = teamId ? players().filter(function(p){ return p.team===teamId && rd.excludedPlayerIds.indexOf(p.id)!==-1; }) : [];
+    var html = '';
+    if(list.length===0){
+      html = '<p class="empty">Sin jugadores todavía.</p>';
+    } else {
+      html = '<div class="table-wrap"><table class="data"><thead><tr><th>Jugador</th><th class="num">HCI</th><th class="num">Hcp juego</th><th></th></tr></thead><tbody>' +
+        list.map(function(e){
+          var hci = ryderEntryHci(e);
+          var chcp = ryderEntryCourseHcp(e, rd.tee);
+          var badge = e.auto ? ' <span class="pill muted">de Equipos</span>' : (e.source==='manual' ? ' <span class="pill muted">invitado</span>' : '');
+          var delBtn = e.auto
+            ? '<button type="button" class="btn small danger" data-ryder-exclude="'+esc(e.playerId)+'">Quitar</button>'
+            : '<button type="button" class="btn small danger" data-ryder-del-roster="'+esc(e.id)+'">Quitar</button>';
+          return '<tr><td>'+esc(ryderEntryName(e))+badge+'</td><td class="num">'+(hci==null?'—':hci.toFixed(1))+'</td><td class="num">'+(chcp==null?'—':chcp)+'</td>' +
+            '<td>'+delBtn+'</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
+    if(excluded.length){
+      html += '<p class="hint">Excluidos de esta Ryder (siguen en su equipo de Equipos): ' + excluded.map(function(p){
+        return esc(p.name) + ' <button type="button" class="btn small" data-ryder-readmit="'+esc(p.id)+'">Readmitir</button>';
+      }).join(', ') + '</p>';
+    }
+    wrap.innerHTML = html;
     $all('[data-ryder-del-roster]', wrap).forEach(function(btn){
       var rid = btn.getAttribute('data-ryder-del-roster');
       bindConfirmDelete(btn, function(){
@@ -3086,18 +3132,36 @@
         StoreOps.setRyder({ roster: newRoster, pairings: ryderStripFromPairings(rd2.pairings, rid) }).then(render);
       }, { timeoutMs: 3000 });
     });
+    $all('[data-ryder-exclude]', wrap).forEach(function(btn){
+      var pid = btn.getAttribute('data-ryder-exclude');
+      bindConfirmDelete(btn, function(){
+        var rd2 = ryder();
+        StoreOps.setRyder({
+          excludedPlayerIds: rd2.excludedPlayerIds.concat([pid]),
+          pairings: ryderStripFromPairings(rd2.pairings, 'auto_'+pid)
+        }).then(render);
+      }, { timeoutMs: 3000 });
+    });
+    $all('[data-ryder-readmit]', wrap).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var pid = btn.getAttribute('data-ryder-readmit');
+        var rd2 = ryder();
+        StoreOps.setRyder({ excludedPlayerIds: rd2.excludedPlayerIds.filter(function(x){ return x!==pid; }) }).then(render);
+      });
+    });
   }
-  function ryderTeamHcps(ids, rd){
+  function ryderTeamHcps(ids, allMembers, rd){
     return ids.map(function(rid){
-      var e = rd.roster.find(function(x){ return x.id===rid; });
+      var e = allMembers.find(function(x){ return x.id===rid; });
       return e ? ryderEntryCourseHcp(e, rd.tee) : null;
     });
   }
   function renderRyderFormatCard(key, rd){
     var def = RYDER_FORMATS[key];
     var Key = cap1(key);
-    var teamA = rd.roster.filter(function(e){ return e.team==='a'; });
-    var teamB = rd.roster.filter(function(e){ return e.team==='b'; });
+    var teamA = ryderTeamMembers('a', rd);
+    var teamB = ryderTeamMembers('b', rd);
+    var allMembers = teamA.concat(teamB);
     function options(list, current){
       return '<option value="">—</option>' + list.map(function(e){
         return '<option value="'+esc(e.id)+'" '+(e.id===current?'selected':'')+'>'+esc(ryderEntryName(e))+'</option>';
@@ -3111,8 +3175,8 @@
       var aSel = aIds.map(function(rid,i){ return '<select data-ryder-slot="'+key+'|'+p.id+'|a|'+i+'">'+options(teamA, rid)+'</select>'; }).join('');
       var bSel = bIds.map(function(rid,i){ return '<select data-ryder-slot="'+key+'|'+p.id+'|b|'+i+'">'+options(teamB, rid)+'</select>'; }).join('');
       var complete = aIds.every(Boolean) && bIds.every(Boolean);
-      var hA = complete ? ryderTeamHcps(aIds, rd) : [];
-      var hB = complete ? ryderTeamHcps(bIds, rd) : [];
+      var hA = complete ? ryderTeamHcps(aIds, allMembers, rd) : [];
+      var hB = complete ? ryderTeamHcps(bIds, allMembers, rd) : [];
       var calc = (complete && hA.every(function(h){return h!=null;}) && hB.every(function(h){return h!=null;}))
         ? (def.teamSize===2 ? def.compute(hA, hB, rd.allowances) : def.compute(hA[0], hB[0], rd.allowances))
         : null;
@@ -3178,6 +3242,7 @@
     $('#ryderLockedNotice').hidden = true; $('#ryderUnlocked').hidden = false;
     var rd = ryder();
     renderRyderSettings(rd);
+    renderRyderTeamRefSelects(rd);
     renderRyderAddPlayerSelect('a', rd); renderRyderAddPlayerSelect('b', rd);
     renderRyderRosterCol('a', rd); renderRyderRosterCol('b', rd);
     Object.keys(RYDER_FORMATS).forEach(function(key){ renderRyderFormatCard(key, rd); });
@@ -3187,13 +3252,17 @@
     var patch = {
       eventName: $('#rdName').value,
       dates: $('#rdDates').value,
-      'teamNames.a': $('#rdTeamA').value || 'Equipo A',
-      'teamNames.b': $('#rdTeamB').value || 'Equipo B',
       'tee.par': parseInt($('#rdPar').value,10) || 72,
       'tee.cr': parseFloat($('#rdCr').value) || 72,
       'tee.sr': parseInt($('#rdSr').value,10) || 113
     };
     StoreOps.setRyder(patch).then(render);
+  });
+  ['a','b'].forEach(function(side){
+    $('#rdTeamRef'+side.toUpperCase()).addEventListener('change', function(){
+      var patch = {}; patch['teamRefs.'+side] = this.value || null;
+      StoreOps.setRyder(patch).then(render);
+    });
   });
   ['a','b'].forEach(function(team){
     var T = team.toUpperCase();
