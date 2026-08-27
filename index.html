@@ -894,7 +894,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-27.3";
+  var APP_VERSION = "2026-08-27.4";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1112,6 +1112,19 @@
     var seen = {}; var out = [];
     tees().forEach(function(t){ if(!seen[t.course]){ seen[t.course]=true; out.push(t.course); } });
     return out;
+  }
+  // Campos con al menos una barra "vigente" (no obsoleta) — la única lista válida para elegir
+  // campo al meter una ronda nueva. `courseNames()` (arriba) incluye TODOS los campos que tengan
+  // alguna barra, aunque esté oculta, porque otras partes de la app sí necesitan verlos así
+  // (filtro de la pestaña Rondas para rondas históricas, borrado de campo en Admin…). Pero si se
+  // ofrece un campo así en el buscador de "nueva ronda" y todas sus barras están ocultas,
+  // `populateTeeSelect` no tiene nada que ofrecer y el desplegable de barra se queda con "Elige
+  // campo primero" aunque el campo sí esté elegido — un callejón sin salida detectado el
+  // 27/8/2026 (probado con "Laukaritz", el duplicado mal escrito de Laukariz).
+  function courseNamesWithSelectableTee(){
+    var withActive = {};
+    tees().forEach(function(t){ if(!t.hidden) withActive[t.course] = true; });
+    return courseNames().filter(function(n){ return withActive[n]; });
   }
 
   // ---------- duplicate-avoidance helpers (para altas manuales e importaciones) ----------
@@ -1716,15 +1729,22 @@
       return String(a.color || '').localeCompare(String(b.color || ''), 'es', { sensitivity: 'base' });
     });
   }
-  function courseCombo(inputEl, hiddenEl, menuEl){
+  function courseCombo(inputEl, hiddenEl, menuEl, namesFn){
+    namesFn = namesFn || courseNames;
     var matches = [], activeIdx = -1;
     function closeMenu(){ menuEl.hidden = true; menuEl.innerHTML = ''; activeIdx = -1; }
     function renderMenu(query){
-      var names = courseNames().slice().sort(function(a,b){ return a.localeCompare(b, 'es'); });
+      var names = namesFn().slice().sort(function(a,b){ return a.localeCompare(b, 'es'); });
       var q = normName(query || '');
       matches = q ? names.filter(function(n){ return normName(n).indexOf(q) !== -1; }) : names;
       if(matches.length === 0){
-        menuEl.innerHTML = '<div class="empty">Ningún campo coincide con “'+esc(query)+'”. Créalo desde la pestaña Campos.</div>';
+        // Si lo escrito coincide con un campo que existe pero no está en `names` (p.ej. porque
+        // namesFn excluye campos sin ninguna barra vigente), se avisa del motivo real en vez de
+        // dar a entender que el campo no existe — ver `courseNamesWithSelectableTee`.
+        var obsoleteMatch = q ? courseNames().find(function(n){ return normName(n).indexOf(q) !== -1 && names.indexOf(n) === -1; }) : null;
+        menuEl.innerHTML = obsoleteMatch
+          ? '<div class="empty">“'+esc(obsoleteMatch)+'” existe pero todas sus barras están marcadas como obsoletas, así que no se puede elegir para una ronda nueva. Reactiva alguna barra suya (o edítala) desde la pestaña Campos.</div>'
+          : '<div class="empty">Ningún campo coincide con “'+esc(query)+'”. Créalo desde la pestaña Campos.</div>';
         menuEl.hidden = false;
         return;
       }
@@ -1773,7 +1793,7 @@
         if(hiddenEl.value) return;
         var typed = inputEl.value.trim();
         if(!typed) return;
-        var exact = courseNames().find(function(n){ return normName(n) === normName(typed); });
+        var exact = namesFn().find(function(n){ return normName(n) === normName(typed); });
         if(exact) pick(exact); else inputEl.value = '';
       }, 150);
     });
@@ -1781,7 +1801,7 @@
       setValue: function(name){ hiddenEl.value = name || ''; inputEl.value = name || ''; }
     };
   }
-  var rfCourseCombo = courseCombo($('#rf-course-search'), $('#rf-course'), $('#rf-course-menu'));
+  var rfCourseCombo = courseCombo($('#rf-course-search'), $('#rf-course'), $('#rf-course-menu'), courseNamesWithSelectableTee);
   function populateTeeSelect(courseName){
     var sel = $('#rf-tee');
     // Las barras marcadas como "obsoleta" (hidden) siguen existiendo para las rondas históricas
