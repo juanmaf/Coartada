@@ -710,6 +710,7 @@
             </div>
             <div class="card" style="flex:1 1 260px;">
               <h2 style="font-size:16px;margin-bottom:10px;">Limpieza de campos duplicados</h2>
+              <p class="hint" style="margin:0 0 10px;">Para renombrar el nombre de una barra en vez de borrarla, ve a la pestaña <b>Campos</b> — ahí, con el PIN metido, cada barra tiene su propio botón "Renombrar".</p>
               <div id="adminDupeHint" style="margin-bottom:10px;"></div>
               <div class="table-wrap"><table class="data" id="adminCoursesTable">
                 <thead><tr><th>Campo</th><th></th></tr></thead>
@@ -893,7 +894,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-26.4";
+  var APP_VERSION = "2026-08-27.3";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1694,6 +1695,27 @@
   // `#rf-course` sigue siendo el campo "real" (hidden) que lee el resto del código tal cual
   // (mismo `.value` de siempre, mismo evento `change`); `#rf-course-search` es solo la parte
   // visible con la que escribe el usuario.
+  // Orden de barras dentro de un mismo campo: pedido el 27/8/2026 para que, cuando un campo
+  // tiene varias barras del mismo color (p.ej. Laukariz con "Amarillas", "Amarillas (variante)"
+  // y "Amarillas (variante 2)"), salgan juntas en vez de mezcladas con las de otros colores —
+  // y que "Amarillas" (el color más habitual para jugar) aparezca siempre primero entre los
+  // distintos colores. Dentro de un mismo color, las variantes se ordenan alfabéticamente para
+  // que sea un orden estable y predecible.
+  function teeColorBaseKey(color){
+    var w = String(color || '').trim();
+    var m = w.match(/^([^\s(]+)/); // primera palabra, sin contar paréntesis: "Amarillas (variante)" -> "Amarillas"
+    var base = m ? m[1] : w;
+    return normName(base).replace(/s$/, ''); // agrupa también singular/plural del mismo color
+  }
+  function sortTeesByColorGroup(ts){
+    return ts.slice().sort(function(a, b){
+      var ka = teeColorBaseKey(a.color), kb = teeColorBaseKey(b.color);
+      var aAmarillas = ka === 'amarilla', bAmarillas = kb === 'amarilla';
+      if(aAmarillas !== bAmarillas) return aAmarillas ? -1 : 1;
+      if(ka !== kb) return ka.localeCompare(kb, 'es');
+      return String(a.color || '').localeCompare(String(b.color || ''), 'es', { sensitivity: 'base' });
+    });
+  }
   function courseCombo(inputEl, hiddenEl, menuEl){
     var matches = [], activeIdx = -1;
     function closeMenu(){ menuEl.hidden = true; menuEl.innerHTML = ''; activeIdx = -1; }
@@ -1766,7 +1788,7 @@
     // que ya las usan, pero no se ofrecen aquí para rondas nuevas — evita elegir por error una
     // valoración antigua cuando ya hay una vigente para el mismo campo/color (ver decisiones del
     // proyecto, sección "barras obsoletas").
-    var ts = tees().filter(function(t){ return t.course===courseName && !t.hidden; });
+    var ts = sortTeesByColorGroup(tees().filter(function(t){ return t.course===courseName && !t.hidden; }));
     if(ts.length===0){ sel.innerHTML = '<option value="">Elige campo primero</option>'; return; }
     sel.innerHTML = '<option value="">Elige barra…</option>' + ts.map(function(t){
       return '<option value="'+esc(t.color)+'">'+esc(t.color)+' (CR '+t.cr+' / SR '+t.sr+' / Par '+t.par+')</option>';
@@ -3019,7 +3041,7 @@
     ts.forEach(function(t){ (byCourse[t.course]=byCourse[t.course]||[]).push(t); });
     var out = '';
     Object.keys(byCourse).sort().forEach(function(cName){
-      byCourse[cName].forEach(function(t,i){
+      sortTeesByColorGroup(byCourse[cName]).forEach(function(t,i){
         var colorCell, action;
         if(adminUnlocked && renamingTeeId === t.id){
           colorCell = '<input type="text" data-rename-tee-input="'+esc(t.id)+'" value="'+esc(t.color)+'" style="width:100%;">';
