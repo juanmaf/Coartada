@@ -484,6 +484,51 @@
           </details>
         </div>
 
+        <!-- "Cargar rondas desde una captura" (27/8/2026): oculta sola si HCP_RECAPTCHA_SITE_KEY
+             no está configurada todavía (ver firebase-config.js y SETUP.md, Parte 3) — controlado
+             por initScreenshotImportUi(). No requiere PIN de admin: cualquier jugador identificado
+             puede usarla, pero nada se guarda hasta que la misma persona aprueba cada fila. -->
+        <div class="card" id="ssCard" hidden>
+          <div class="section-head">
+            <div><h2>Cargar rondas desde una captura</h2><p>Sube una foto o captura del marcador de una partida (de cualquier app de golf) — te propongo una ronda por jugador detectado, tú confirmas el campo/barra y apruebas cada una antes de que se guarde nada.</p></div>
+          </div>
+          <div id="ssIdle">
+            <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="ssFileInput" accept="image/*">
+              <button type="button" class="btn primary" id="ssParseBtn" disabled>Leer captura</button>
+            </div>
+            <p class="hint">Elige una foto o captura de pantalla del marcador y pulsa "Leer captura".</p>
+          </div>
+          <div id="ssLoading" hidden><p class="hint">Leyendo la captura…</p></div>
+          <div id="ssError" hidden style="color:var(--critical);font-size:13px;margin-top:8px;"></div>
+          <div id="ssReview" hidden>
+            <div class="grid2" style="margin-top:10px;">
+              <div class="field" style="margin:0;">
+                <label for="ssCourseSearch">Campo jugado</label>
+                <div class="combo">
+                  <input type="text" id="ssCourseSearch" autocomplete="off" placeholder="Escribe para buscar un campo…">
+                  <input type="hidden" id="ssCourse">
+                  <div class="combo-menu" id="ssCourseMenu" hidden></div>
+                </div>
+              </div>
+              <div class="field" style="margin:0;">
+                <label for="ssTeeSelect">Barra</label>
+                <select id="ssTeeSelect"><option value="">Elige campo primero</option></select>
+              </div>
+            </div>
+            <div class="field" style="max-width:220px;">
+              <label for="ssDate">Fecha</label>
+              <input type="date" id="ssDate">
+            </div>
+            <p class="hint">Confirma el campo, la barra y la fecha jugados — se usan para todas las filas de esta captura.</p>
+            <div id="ssRowsWrap"></div>
+            <div class="row" style="gap:8px;margin-top:12px;">
+              <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
+              <button type="button" class="btn" id="ssCancel">Cancelar / empezar de nuevo</button>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="section-head">
             <div><h2>Filtrar y comparar</h2><p>Por jugador, campo, periodo y clima — con subtotales para ver qué influye más en el resultado.</p></div>
@@ -746,12 +791,20 @@
     <!-- RYDER -->
     <section class="view" id="view-ryder">
       <div class="stack">
+        <!-- Clasificación: pública para todo el grupo, no requiere PIN (pedido el 27/8/2026 —
+             antes toda la pestaña Ryder, clasificación incluida, quedaba oculta salvo con el PIN
+             de admin metido, y no tenía sentido para algo que el grupo entero quiere consultar). -->
+        <div class="card" id="ryderScoreboardCard" hidden>
+          <div class="section-head"><div><h2>Clasificación</h2><p id="ryderScoreboardSub"></p></div></div>
+          <div id="ryderScoreboardBody"></div>
+        </div>
+
         <div class="card" id="ryderLockedNotice" hidden>
-          <p style="color:var(--muted);">Desbloquea el PIN de administración en la pestaña Admin para usar esta herramienta.</p>
+          <p style="color:var(--muted);">El resto de la preparación de la Ryder (equipos, parejas y anotar resultados) requiere el PIN de administración, en la pestaña Admin.</p>
         </div>
         <div class="stack" id="ryderUnlocked" hidden>
           <div class="banner info">
-            Preparación de la Ryder Pucela Cup: monta los dos equipos, calcula el hándicap de juego de cada uno para el campo del torneo y las parejas de cada formato. Solo la ves tú — no aparece para el resto del grupo.
+            Preparación de la Ryder Pucela Cup: monta los dos equipos, calcula el hándicap de juego de cada uno para el campo del torneo, forma las parejas/partidos de cada formato y anota el resultado de cada uno. La Clasificación de arriba la ve todo el grupo; el resto de esta pestaña solo tú, con el PIN metido.
           </div>
 
           <div class="card">
@@ -784,6 +837,14 @@
               <div class="field"><label for="rdPar">Par</label><input type="number" id="rdPar" step="1" readonly></div>
               <div class="field"><label for="rdCr">CR</label><input type="number" id="rdCr" step="0.1" readonly></div>
               <div class="field"><label for="rdSr">Slope</label><input type="number" id="rdSr" step="1" readonly></div>
+            </div>
+            <div class="field" style="margin:14px 0 0;max-width:260px;">
+              <label for="rdHcpAllowance">% de hándicap aplicado (Hcp Juego)</label>
+              <div class="row" style="gap:4px;align-items:center;">
+                <input type="number" id="rdHcpAllowance" step="1" min="0" max="150" style="width:80px;">
+                <span>%</span>
+              </div>
+              <div class="hint">100% = hándicap de juego completo (lo normal). Bájalo a 95%, 90%… si el comité del torneo decide aplicar una reducción para esta Ryder — se usa en el Hcp Juego de todos, antes de calcular los golpes de cada formato.</div>
             </div>
           </div>
 
@@ -825,6 +886,7 @@
               <div class="field" style="margin:0;width:140px;"><label for="rdAllowFourball">Golpes concedidos</label><div class="row" style="gap:4px;align-items:center;"><input type="number" id="rdAllowFourball" step="1" min="0" max="100" style="width:70px;"><span>%</span></div></div>
             </div>
             <button type="button" class="btn small" id="rdAddPairFourball" style="margin-bottom:12px;">+ Añadir pareja</button>
+            <button type="button" class="btn small" data-ryder-fill="fourball|6" style="margin-bottom:12px;">Rellenar hasta 6 parejas</button>
             <div id="rdPairsFourball"></div>
             <p class="hint" id="rdTotalsFourball" style="margin-top:10px;"></p>
           </div>
@@ -835,6 +897,7 @@
               <div class="field" style="margin:0;width:140px;"><label for="rdAllowFoursome">Golpes concedidos</label><div class="row" style="gap:4px;align-items:center;"><input type="number" id="rdAllowFoursome" step="1" min="0" max="100" style="width:70px;"><span>%</span></div></div>
             </div>
             <button type="button" class="btn small" id="rdAddPairFoursome" style="margin-bottom:12px;">+ Añadir pareja</button>
+            <button type="button" class="btn small" data-ryder-fill="foursome|6" style="margin-bottom:12px;">Rellenar hasta 6 parejas</button>
             <div id="rdPairsFoursome"></div>
             <p class="hint" id="rdTotalsFoursome" style="margin-top:10px;"></p>
           </div>
@@ -858,6 +921,7 @@
               <div class="field" style="margin:0;width:140px;"><label for="rdAllowIndividual">Golpes concedidos</label><div class="row" style="gap:4px;align-items:center;"><input type="number" id="rdAllowIndividual" step="1" min="0" max="100" style="width:70px;"><span>%</span></div></div>
             </div>
             <button type="button" class="btn small" id="rdAddPairIndividual" style="margin-bottom:12px;">+ Añadir partido</button>
+            <button type="button" class="btn small" data-ryder-fill="individual|12" style="margin-bottom:12px;">Rellenar hasta 12 partidos</button>
             <div id="rdPairsIndividual"></div>
             <p class="hint" id="rdTotalsIndividual" style="margin-top:10px;"></p>
           </div>
@@ -898,6 +962,43 @@
   var app = initializeApp(window.HCP_FIREBASE_CONFIG);
   var db = getFirestore(app);
 
+  // ---------- "Cargar rondas desde una captura" (27/8/2026) ----------
+  // Única función de backend de todo el proyecto (ver functions/index.js) — protegida con
+  // Firebase App Check para que solo esta misma página, cargada de verdad, pueda llamarla (ver
+  // SETUP.md, Parte 3, y las decisiones del proyecto sobre por qué). Los módulos de Functions y
+  // App Check se cargan con `import()` dinámico, SOLO si `HCP_RECAPTCHA_SITE_KEY` está
+  // configurada — así nadie que despliegue sin haber hecho todavía la Parte 3 de SETUP.md paga
+  // ni siquiera la descarga de estos módulos, y el propio entorno de pruebas (sin acceso a
+  // gstatic.com) no los necesita para nada.
+  var screenshotImportReady = false;
+  var parseScorecardImageFn = null;
+  // Se resuelve a `true` solo si de verdad se ha podido cargar y configurar Functions+App
+  // Check (recaptcha configurada, módulos descargados sin error) — `initScreenshotImportUi()`
+  // se vuelve a llamar cuando esto resuelve, para revelar la tarjeta y enganchar sus listeners
+  // justo en ese momento (ver más abajo; en el primer paso síncrono, antes de que esto resuelva,
+  // `screenshotImportReady` todavía es `false`, así que la tarjeta empieza siempre oculta salvo
+  // en el entorno de pruebas, que usa `window.__mockScreenshotParse` en su lugar).
+  var screenshotImportInitPromise = (function(){
+    var recaptchaKey = window.HCP_RECAPTCHA_SITE_KEY;
+    if (!recaptchaKey || recaptchaKey.indexOf('PON_AQUI') === 0) return Promise.resolve(false);
+    return Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.13.0/firebase-functions.js"),
+      import("https://www.gstatic.com/firebasejs/10.13.0/firebase-app-check.js")
+    ]).then(function(mods){
+      var getFunctions = mods[0].getFunctions, httpsCallable = mods[0].httpsCallable;
+      var initializeAppCheck = mods[1].initializeAppCheck, ReCaptchaEnterpriseProvider = mods[1].ReCaptchaEnterpriseProvider;
+      initializeAppCheck(app, { provider: new ReCaptchaEnterpriseProvider(recaptchaKey), isTokenAutoRefreshEnabled: true });
+      parseScorecardImageFn = httpsCallable(getFunctions(app, 'europe-west1'), 'parseScorecardImage');
+      screenshotImportReady = true;
+      return true;
+    }).catch(function(e){ return false; /* si algo falla al configurar, la tarjeta se queda oculta y el resto de la app sigue normal */ });
+  })();
+  function screenshotImportAvailable(){
+    // En el entorno de pruebas, un window.__mockScreenshotParse hace de función simulada aunque
+    // no haya App Check configurado (ver test/pw_screenshot_check.mjs).
+    return screenshotImportReady || typeof window.__mockScreenshotParse === 'function';
+  }
+
   // ---------- Control de versión ----------
   // GitHub Pages no tiene "build": el HTML que sirve es exactamente el commiteado, y una
   // pestaña abierta antes de un despliegue sigue ejecutando el código viejo indefinidamente
@@ -905,7 +1006,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-27.5";
+  var APP_VERSION = "2026-08-27.11";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1940,6 +2041,255 @@
       applyUpdateNowIfSafe();
       queueWeatherFor(ref.id, courseName, date);
     });
+  });
+
+  // ---------- "Cargar rondas desde una captura" (pedido el 27/8/2026) ----------
+  // Cualquier jugador identificado puede subir una foto/captura del marcador de una partida (de
+  // cualquier app de golf) y la app propone una fila por jugador detectado — pero NADA se
+  // guarda como ronda real hasta que la misma persona confirma el campo/barra jugado y aprueba
+  // cada fila (o "Aprobar todas"), una por una o de golpe. La lectura de la imagen la hace
+  // `functions/index.js` (la única pieza de backend de todo el proyecto); aquí solo se llama,
+  // se revisa y se aprueba.
+
+  // Emparejado de nombres detectados en la captura con jugadores reales de la app: mismo
+  // principio que `findPossibleDuplicateCoursePairs` mas para personas — normaliza (sin tildes
+  // ni mayúsculas, `normName` ya existente) y compara por contención de texto y por palabras
+  // compartidas, ignorando conectores como "de"/"del"/"la". Es solo una SUGERENCIA preseleccionada
+  // en un desplegable — el usuario que aprueba la fila puede corregirla siempre.
+  var GENERIC_NAME_WORDS = { de:1, del:1, la:1, las:1, los:1, y:1 };
+  function significantNameTokens(normalized){
+    return normalized.split(' ').filter(function(w){ return w && !GENERIC_NAME_WORDS[w]; });
+  }
+  function bestPlayerMatch(rawName){
+    var norm = normName(rawName || '');
+    if(!norm) return null;
+    var best = null, bestScore = 0;
+    players().forEach(function(p){
+      var pn = normName(p.name);
+      var score = 0;
+      if(pn === norm) score = 100;
+      else if(pn.length>=4 && norm.length>=4 && (pn.indexOf(norm)!==-1 || norm.indexOf(pn)!==-1)) score = 50;
+      else {
+        var ta = significantNameTokens(pn), tb = significantNameTokens(norm);
+        var shared = ta.filter(function(w){ return tb.indexOf(w)!==-1; }).length;
+        if(shared>=1) score = 10*shared;
+      }
+      if(score > bestScore){ bestScore = score; best = p; }
+    });
+    return bestScore >= 10 ? best : null;
+  }
+
+  // Aviso de "posible ronda duplicada" (pedido el 27/8/2026: "jugador + campo + fecha +
+  // resultado"): si ya existe una ronda de ese jugador, ese día, en ese campo, con el mismo
+  // resultado Stableford, casi seguro es la misma captura cargada dos veces. Si el resultado es
+  // distinto, puede ser una segunda vuelta real el mismo día y no avisa.
+  function findPossibleDuplicateRound(playerId, courseName, dateIso, stableford){
+    if(!playerId || !courseName || !dateIso || typeof stableford !== 'number') return null;
+    return rounds().find(function(r){
+      return r.player===playerId && r.course===courseName && r.date===dateIso &&
+        r.mode==='sf' && typeof r.stableford==='number' && r.stableford===stableford;
+    }) || null;
+  }
+
+  function fileToBase64(file){
+    return new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(){ resolve(String(reader.result).split(',')[1] || ''); };
+      reader.onerror = function(){ reject(new Error('No se pudo leer el fichero.')); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // En producción llama a la Cloud Function real; en el entorno de pruebas (o si alguien quiere
+  // probar el flujo sin gastar ninguna llamada real) se puede inyectar
+  // window.__mockScreenshotParse(payload) -> {fecha, campo, filas} para simularla.
+  function callScreenshotParser(imageBase64, mimeType){
+    if(typeof window.__mockScreenshotParse === 'function'){
+      return Promise.resolve(window.__mockScreenshotParse({ imageBase64: imageBase64, mimeType: mimeType }));
+    }
+    if(!parseScorecardImageFn) return Promise.reject(new Error('screenshot-import-not-configured'));
+    return parseScorecardImageFn({ imageBase64: imageBase64, mimeType: mimeType }).then(function(res){ return res.data; });
+  }
+
+  function ssErrorMessage(err){
+    var code = err && err.code;
+    if(code === 'functions/resource-exhausted') return 'Se ha llegado al máximo de lecturas de hoy — inténtalo mañana, o mete la ronda a mano mientras tanto.';
+    if(code === 'functions/invalid-argument') return 'Esa imagen no se puede leer bien (¿es una foto o captura válida?).';
+    if(err && err.message === 'screenshot-import-not-configured') return 'Esta función todavía no está configurada en este despliegue (ver SETUP.md, Parte 3).';
+    return 'No se ha podido leer la captura. Puedes intentarlo de nuevo o meter la ronda a mano.';
+  }
+
+  var ssRowIdSeq = 1;
+  var ssData = null; // { rows: [{id, nombreDetectado, playerId, hcp, resultado, approved}] }
+  var ssCourseCombo = null;
+
+  function populateSsTeeSelect(courseName){
+    var sel = $('#ssTeeSelect');
+    var ts = sortTeesByColorGroup(tees().filter(function(t){ return t.course===courseName && !t.hidden; }));
+    if(!courseName || ts.length===0){ sel.innerHTML = '<option value="">Elige campo primero</option>'; return; }
+    sel.innerHTML = '<option value="">Elige barra…</option>' + ts.map(function(t){
+      return '<option value="'+esc(t.color)+'">'+esc(t.color)+' (CR '+t.cr+' / SR '+t.sr+' / Par '+t.par+')</option>';
+    }).join('');
+  }
+
+  function ssReadyToApprove(){
+    return !!($('#ssCourse').value && $('#ssTeeSelect').value && $('#ssDate').value);
+  }
+
+  function renderSsRows(){
+    if(!ssData) return;
+    var courseName = $('#ssCourse').value, dateVal = $('#ssDate').value;
+    var canApproveAny = ssReadyToApprove();
+    var wrap = $('#ssRowsWrap');
+    var playerOptionsBase = players().slice().sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
+    wrap.innerHTML = ssData.rows.map(function(row){
+      if(row.approved){
+        return '<div class="card" style="margin-top:8px;padding:10px 12px;color:var(--fairway);">✓ '+esc(row.nombreDetectado || '(sin nombre)')+' — ronda guardada.</div>';
+      }
+      var resultadoNum = (row.resultado==='' || row.resultado==null) ? null : Number(row.resultado);
+      var dup = canApproveAny && row.playerId && resultadoNum!=null
+        ? findPossibleDuplicateRound(row.playerId, courseName, dateVal, resultadoNum) : null;
+      var playerOptions = '<option value="">-- elige jugador --</option>' + playerOptionsBase.map(function(p){
+        return '<option value="'+esc(p.id)+'"'+(p.id===row.playerId?' selected':'')+'>'+esc(p.name)+'</option>';
+      }).join('');
+      var canApprove = canApproveAny && row.playerId && row.hcp!=='' && row.hcp!=null && resultadoNum!=null;
+      return '<div class="card" style="margin-top:8px;padding:10px 12px;">' +
+        '<div class="hint">Detectado en la captura: "'+esc(row.nombreDetectado || '(sin nombre)')+'"</div>' +
+        '<div class="grid3">' +
+          '<div class="field" style="margin:6px 0;"><label>Jugador</label><select data-ss-player="'+row.id+'">'+playerOptions+'</select></div>' +
+          '<div class="field" style="margin:6px 0;"><label>HCP</label><input type="number" step="0.1" data-ss-hcp="'+row.id+'" value="'+esc(row.hcp)+'"></div>' +
+          '<div class="field" style="margin:6px 0;"><label>Stableford</label><input type="number" step="1" data-ss-resultado="'+row.id+'" value="'+esc(row.resultado)+'"></div>' +
+        '</div>' +
+        (dup ? '<p class="pill warning" style="display:inline-block;">Posible duplicado: '+esc(pname(row.playerId))+' ya tiene una ronda igual ese día en ese campo — revísalo antes de aprobar.</p>' : '') +
+        '<div><button type="button" class="btn small primary" data-ss-approve="'+row.id+'"'+(canApprove?'':' disabled')+'>Aprobar esta ronda</button></div>' +
+      '</div>';
+    }).join('');
+    $all('[data-ss-player]', wrap).forEach(function(sel){
+      sel.addEventListener('change', function(){
+        var row = ssData.rows.find(function(r){ return r.id===sel.getAttribute('data-ss-player'); });
+        if(row) row.playerId = sel.value;
+        renderSsRows();
+      });
+    });
+    $all('[data-ss-hcp]', wrap).forEach(function(inp){
+      inp.addEventListener('change', function(){
+        var row = ssData.rows.find(function(r){ return r.id===inp.getAttribute('data-ss-hcp'); });
+        if(row) row.hcp = inp.value;
+        renderSsRows();
+      });
+    });
+    $all('[data-ss-resultado]', wrap).forEach(function(inp){
+      inp.addEventListener('change', function(){
+        var row = ssData.rows.find(function(r){ return r.id===inp.getAttribute('data-ss-resultado'); });
+        if(row) row.resultado = inp.value;
+        renderSsRows();
+      });
+    });
+    $all('[data-ss-approve]', wrap).forEach(function(btn){
+      btn.addEventListener('click', function(){ approveSsRow(btn.getAttribute('data-ss-approve')); });
+    });
+  }
+
+  function approveSsRow(rowId){
+    var row = ssData && ssData.rows.find(function(r){ return r.id===rowId; });
+    if(!row) return;
+    var courseName = $('#ssCourse').value, teeColor = $('#ssTeeSelect').value, dateVal = $('#ssDate').value;
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
+    var hcp = parseFloat(row.hcp), pts = parseFloat(row.resultado);
+    if(!row.playerId || !tee || !dateVal || isNaN(hcp) || isNaN(pts)) return;
+    var adjScore = tee.par + 36 - pts + hcp;
+    var diff = round1((adjScore - tee.cr) * 113 / tee.sr);
+    var status = config().autoApprove ? 'aprobada' : 'pendiente';
+    row.approved = true; // marca optimista; se revierte si falla el guardado
+    renderSsRows();
+    StoreOps.addRound({
+      player: row.playerId, course: courseName, tee: teeColor, date: dateVal,
+      stableford: pts, hcp: hcp, cr: tee.cr, sr: tee.sr, par: tee.par,
+      differential: diff, status: status, mode: 'sf'
+    }).then(function(ref){
+      render();
+      applyUpdateNowIfSafe();
+      queueWeatherFor(ref.id, courseName, dateVal);
+    }).catch(function(){
+      row.approved = false;
+      renderSsRows();
+    });
+  }
+
+  function initScreenshotImportUi(){
+    if(!screenshotImportAvailable()){ $('#ssCard').hidden = true; return; }
+    $('#ssCard').hidden = false;
+    ssCourseCombo = courseCombo($('#ssCourseSearch'), $('#ssCourse'), $('#ssCourseMenu'), courseNamesWithSelectableTee);
+
+    $('#ssFileInput').addEventListener('change', function(){
+      $('#ssParseBtn').disabled = !this.files || this.files.length===0;
+    });
+
+    $('#ssParseBtn').addEventListener('click', function(){
+      var file = $('#ssFileInput').files[0];
+      if(!file) return;
+      $('#ssError').hidden = true;
+      $('#ssIdle').hidden = true;
+      $('#ssLoading').hidden = false;
+      fileToBase64(file).then(function(b64){
+        return callScreenshotParser(b64, file.type);
+      }).then(function(result){
+        $('#ssLoading').hidden = true;
+        ssData = {
+          rows: (result.filas || []).map(function(f){
+            var match = bestPlayerMatch(f.nombre);
+            return {
+              id: 'ssr' + (ssRowIdSeq++),
+              nombreDetectado: f.nombre || '',
+              playerId: match ? match.id : '',
+              hcp: (typeof f.hcp === 'number') ? f.hcp : '',
+              resultado: (typeof f.resultado === 'number') ? f.resultado : '',
+              approved: false
+            };
+          })
+        };
+        if(result.campo){ ssCourseCombo.setValue(result.campo); populateSsTeeSelect(result.campo); }
+        $('#ssDate').value = result.fecha || '';
+        $('#ssReview').hidden = false;
+        renderSsRows();
+      }).catch(function(err){
+        $('#ssLoading').hidden = true;
+        $('#ssIdle').hidden = false;
+        $('#ssError').hidden = false;
+        $('#ssError').textContent = ssErrorMessage(err);
+      });
+    });
+
+    $('#ssCourse').addEventListener('change', function(){
+      populateSsTeeSelect(this.value);
+      renderSsRows();
+    });
+    $('#ssTeeSelect').addEventListener('change', renderSsRows);
+    $('#ssDate').addEventListener('change', renderSsRows);
+
+    $('#ssApproveAll').addEventListener('click', function(){
+      if(!ssData || !ssReadyToApprove()) return;
+      var courseName = $('#ssCourse').value, dateVal = $('#ssDate').value;
+      ssData.rows.slice().forEach(function(row){
+        if(row.approved || !row.playerId || row.hcp==='' || row.hcp==null || row.resultado==='' || row.resultado==null) return;
+        var dup = findPossibleDuplicateRound(row.playerId, courseName, dateVal, Number(row.resultado));
+        if(dup) return; // las que avisan de posible duplicado se aprueban a mano, una a una
+        approveSsRow(row.id);
+      });
+    });
+
+    $('#ssCancel').addEventListener('click', function(){
+      ssData = null;
+      $('#ssFileInput').value = '';
+      $('#ssParseBtn').disabled = true;
+      $('#ssReview').hidden = true;
+      $('#ssError').hidden = true;
+      $('#ssIdle').hidden = false;
+    });
+  }
+  initScreenshotImportUi(); // primera pasada: ya revela la tarjeta si hay mock de test; si no, queda oculta
+  screenshotImportInitPromise.then(function(ready){
+    if(ready) initScreenshotImportUi(); // App Check quedó listo de verdad: revela la tarjeta y engancha sus listeners
   });
 
   function roundResultCells(r){
@@ -3137,13 +3487,15 @@
       $('#adminLocked').hidden = true;
       $('#adminUnlocked').hidden = false;
       $('#pinError').style.display='none';
-      $('#ryderTabBtn').hidden = false;
       render();
     } else {
       $('#pinError').style.display='block';
     }
   });
-  try{ if(sessionStorage.getItem('hcpApp:admin')==='1'){ adminUnlocked = true; $('#ryderTabBtn').hidden = false; } }catch(e){}
+  // La pestaña Ryder ya no depende del PIN para verse (ver renderRyder): la Clasificación es
+  // pública para todo el grupo desde el 27/8/2026 — solo editar el evento (equipos, parejas,
+  // resultados) sigue requiriendo el PIN. `#ryderTabBtn` ya no se oculta/muestra desde aquí.
+  try{ if(sessionStorage.getItem('hcpApp:admin')==='1'){ adminUnlocked = true; } }catch(e){}
   $('#approveAllBtn').addEventListener('click', function(){
     var ids = rounds().filter(function(r){ return r.status==='pendiente'; }).map(function(r){ return r.id; });
     if(ids.length===0) return;
@@ -3349,6 +3701,13 @@
       teamNames: { a: nameFor('a'), b: nameFor('b') },
       excludedPlayerIds: r.excludedPlayerIds || [],
       tee: Object.assign({ par: 72, cr: 72, sr: 113, course: '', color: '' }, r.tee || {}),
+      // "Handicap Aplicado" en el Excel original (hoja Datos, celda M2): un % que se aplica al
+      // Hcp Juego de TODOS antes de calcular golpes por formato — no confundir con el % de
+      // "golpes concedidos" de cada formato (`allowances` de abajo), que se aplica después,
+      // solo a la diferencia entre jugadores/parejas. Pedido el 27/8/2026: "para los cálculos
+      // del hcp de juego también pueda elegir si uso el 100 o el 95 o lo que quiera". Vale 1
+      // (100%) por defecto, igual que en el Excel.
+      hcpAllowance: (typeof r.hcpAllowance === 'number') ? r.hcpAllowance : 1,
       allowances: Object.assign({ fourball: 0.75, foursome: 0.5, greensomeLow: 0.6, greensomeHigh: 0.4, individual: 0.75 }, r.allowances || {}),
       roster: r.roster || [],
       pairings: Object.assign({ fourball: [], foursome: [], greensome: [], individual: [] }, r.pairings || {})
@@ -3356,7 +3715,16 @@
   }
   function ryderEntryName(e){ return e.source==='player' ? pname(e.playerId) : (e.name || '—'); }
   function ryderEntryHci(e){ return e.source==='player' ? currentHCIFor(e.playerId) : ((typeof e.manualHci==='number') ? e.manualHci : null); }
-  function ryderEntryCourseHcp(e, tee){ var hci = ryderEntryHci(e); return hci==null ? null : courseHandicap(hci, tee.sr, tee.cr, tee.par); }
+  // Réplica exacta de la fórmula de la hoja "Datos" del Excel: C2 = ROUND((HCI*Slope/113 + CR -
+  // Par) * $M$2, 0) — el % de "Handicap Aplicado" (`rd.hcpAllowance`) se aplica DENTRO del
+  // redondeo, en un solo paso (no redondear primero y multiplicar después, que puede dar un
+  // número distinto).
+  function ryderEntryCourseHcp(e, rd){
+    var hci = ryderEntryHci(e);
+    if(hci==null) return null;
+    var tee = rd.tee;
+    return Math.round((hci * (tee.sr/113) + (tee.cr - tee.par)) * rd.hcpAllowance);
+  }
   // Un lado del cuadro junta, sin duplicados: los jugadores de la app que ya tienen ese
   // equipo asignado en la pestaña Equipos (salvo que se hayan excluido de esta Ryder en
   // concreto) más las altas manuales guardadas en `roster` — invitados que no usan la app, o
@@ -3400,12 +3768,47 @@
     return hA>hB ? { aStroke:diff, bStroke:0 } : { aStroke:0, bStroke:diff };
   }
 
+  // Interruptor manual para cuando el usuario está probando la Ryder por su cuenta como admin y
+  // no quiere que el grupo la vea todavía (pedido el 27/8/2026, justo después de haber hecho la
+  // Clasificación pública: "quiero que todo esté oculto, ryder y clasificación, porque lo estoy
+  // probando yo como admin y no quiero que nadie lo vea por ahora, más adelante ya lo podrán ver
+  // y usar"). En `false`: TODA la pestaña Ryder —Clasificación incluida— vuelve a requerir el
+  // PIN de admin, ni siquiera se ve el botón de la pestaña sin él. En `true`: se recupera el
+  // comportamiento público (pestaña y Clasificación visibles para todo el grupo sin PIN; solo
+  // editar el evento sigue con PIN) — cuando llegue el momento de abrirlo al grupo, basta con
+  // cambiar esta línea a `true` y volver a desplegar.
+  var RYDER_PUBLIC = false;
+
   var RYDER_FORMATS = {
     fourball:  { title:'Fourball',  teamSize:2, compute: ryderComputeFourball },
     foursome:  { title:'Foursome',  teamSize:2, compute: ryderComputeFoursome },
     greensome: { title:'Greensome', teamSize:2, compute: ryderComputeGreensome },
     individual:{ title:'Individual', teamSize:1, compute: ryderComputeIndividual }
   };
+  // Clasificación en directo (pedido el 27/8/2026: "meter los resultados de cada partida y ver
+  // la clasificación actualizada"). Cada partido de cualquier formato reparte 1 punto en juego,
+  // igual que en una Ryder Cup real: 1-0 si gana un equipo, 0,5-0,5 si empatan. `p.result` es
+  // null/undefined (sin jugar), 'a', 'halved' o 'b'. El marcador de golpes concedidos (arriba)
+  // no interviene aquí — son dos cosas distintas: uno es cuántos golpes se conceden para poder
+  // jugar el partido, otro es quién lo ganó.
+  function ryderMatchPoints(p){
+    if(p.result==='a') return { a:1, b:0 };
+    if(p.result==='b') return { a:0, b:1 };
+    if(p.result==='halved') return { a:0.5, b:0.5 };
+    return null;
+  }
+  function fmtRyderPts(n){ return (Math.round(n*2)/2) % 1 === 0 ? String(Math.round(n)) : n.toFixed(1); }
+  function ryderClassification(rd){
+    var totals = { a:0, b:0, played:0, total:0 };
+    Object.keys(RYDER_FORMATS).forEach(function(key){
+      (rd.pairings[key]||[]).forEach(function(p){
+        totals.total++;
+        var pts = ryderMatchPoints(p);
+        if(pts){ totals.a += pts.a; totals.b += pts.b; totals.played++; }
+      });
+    });
+    return totals;
+  }
 
   function setValIfNotFocused(sel, val){
     var el = $(sel);
@@ -3420,6 +3823,7 @@
     setValIfNotFocused('#rdAllowGreensomeLow', Math.round(rd.allowances.greensomeLow*100));
     setValIfNotFocused('#rdAllowGreensomeHigh', Math.round(rd.allowances.greensomeHigh*100));
     setValIfNotFocused('#rdAllowIndividual', Math.round(rd.allowances.individual*100));
+    setValIfNotFocused('#rdHcpAllowance', Math.round(rd.hcpAllowance*100));
     $('#ryderTeamLabelA').textContent = rd.teamNames.a;
     $('#ryderTeamLabelB').textContent = rd.teamNames.b;
   }
@@ -3490,7 +3894,7 @@
       html = '<div class="table-wrap"><table class="data"><thead><tr><th>Jugador</th><th class="num">HCI</th><th class="num">Hcp juego</th><th></th></tr></thead><tbody>' +
         list.map(function(e){
           var hci = ryderEntryHci(e);
-          var chcp = ryderEntryCourseHcp(e, rd.tee);
+          var chcp = ryderEntryCourseHcp(e, rd);
           var badge = e.auto ? ' <span class="pill muted">de Equipos</span>' : (e.source==='manual' ? ' <span class="pill muted">invitado</span>' : '');
           var delBtn = e.auto
             ? '<button type="button" class="btn small danger" data-ryder-exclude="'+esc(e.playerId)+'">Quitar</button>'
@@ -3534,7 +3938,7 @@
   function ryderTeamHcps(ids, allMembers, rd){
     return ids.map(function(rid){
       var e = allMembers.find(function(x){ return x.id===rid; });
-      return e ? ryderEntryCourseHcp(e, rd.tee) : null;
+      return e ? ryderEntryCourseHcp(e, rd) : null;
     });
   }
   function renderRyderFormatCard(key, rd){
@@ -3549,7 +3953,7 @@
       }).join('');
     }
     var pairs = rd.pairings[key] || [];
-    var totalA = 0, totalB = 0;
+    var totalA = 0, totalB = 0, ptsA = 0, ptsB = 0;
     var rowsHtml = pairs.map(function(p){
       var aIds = def.teamSize===2 ? (p.a && p.a.length===2 ? p.a : [null,null]) : [p.a || null];
       var bIds = def.teamSize===2 ? (p.b && p.b.length===2 ? p.b : [null,null]) : [p.b || null];
@@ -3575,6 +3979,19 @@
           '<span class="pill '+(bStrokeTotal?'warning':'muted')+'">'+esc(rd.teamNames.b)+': +'+bLabel+'</span>';
         totalA += aStrokeTotal; totalB += bStrokeTotal;
       }
+      // Resultado del partido (pedido el 27/8/2026: "meter los resultados de cada partida y ver
+      // la clasificación actualizada") — 1 punto en juego por partido, igual que en una Ryder Cup
+      // real: gana uno de los dos equipos (1-0) o empate (0,5-0,5). El marcador exacto (3&2, 1
+      // up…) es solo una nota informativa, no afecta a la clasificación.
+      var pts = ryderMatchPoints(p);
+      if(pts){ ptsA += pts.a; ptsB += pts.b; }
+      var resultSelect = '<select data-ryder-result="'+key+'|'+p.id+'">' +
+        '<option value=""'+(!p.result?' selected':'')+'>Sin jugar</option>' +
+        '<option value="a"'+(p.result==='a'?' selected':'')+'>Ganan '+esc(rd.teamNames.a)+'</option>' +
+        '<option value="halved"'+(p.result==='halved'?' selected':'')+'>Empate</option>' +
+        '<option value="b"'+(p.result==='b'?' selected':'')+'>Ganan '+esc(rd.teamNames.b)+'</option>' +
+      '</select>';
+      var resultNote = '<input type="text" data-ryder-result-note="'+key+'|'+p.id+'" value="'+esc(p.resultNote||'')+'" placeholder="Marcador, ej. 3&amp;2 (opcional)" style="width:150px;">';
       return '<div class="card" style="padding:12px 14px;margin-bottom:10px;">' +
         '<div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;">' +
           '<div class="row" style="gap:6px;flex:1 1 auto;">'+aSel+'</div>' +
@@ -3583,10 +4000,12 @@
           '<button type="button" class="btn small danger" data-ryder-del-pair="'+key+'|'+p.id+'">Quitar</button>' +
         '</div>' +
         '<div style="margin-top:8px;">'+resultHtml+'</div>' +
+        '<div class="row" style="gap:8px;align-items:center;margin-top:8px;">'+resultSelect+resultNote+'</div>' +
       '</div>';
     }).join('');
     $('#rdPairs'+Key).innerHTML = rowsHtml || '<p class="empty">Todavía no hay parejas en este formato.</p>';
-    $('#rdTotals'+Key).textContent = pairs.length ? ('Total golpes concedidos — '+rd.teamNames.a+': '+totalA+' · '+rd.teamNames.b+': '+totalB) : '';
+    var ptsLine = pairs.length ? (' — Puntos: '+rd.teamNames.a+' '+fmtRyderPts(ptsA)+' · '+rd.teamNames.b+' '+fmtRyderPts(ptsB)) : '';
+    $('#rdTotals'+Key).textContent = pairs.length ? ('Total golpes concedidos — '+rd.teamNames.a+': '+totalA+' · '+rd.teamNames.b+': '+totalB+ptsLine) : '';
     $all('[data-ryder-slot]', $('#rdPairs'+Key)).forEach(function(sel){
       sel.addEventListener('change', function(){
         var parts = sel.getAttribute('data-ryder-slot').split('|');
@@ -3617,11 +4036,67 @@
         StoreOps.setRyder(patch).then(render);
       });
     });
+    $all('[data-ryder-result]', $('#rdPairs'+Key)).forEach(function(sel){
+      sel.addEventListener('change', function(){
+        var parts = sel.getAttribute('data-ryder-result').split('|');
+        var fmt=parts[0], pid=parts[1];
+        var rd2 = ryder();
+        var list = (rd2.pairings[fmt]||[]).map(function(p){
+          if(p.id!==pid) return p;
+          return Object.assign({}, p, { result: sel.value || null });
+        });
+        var patch = {}; patch['pairings.'+fmt] = list;
+        StoreOps.setRyder(patch).then(render);
+      });
+    });
+    $all('[data-ryder-result-note]', $('#rdPairs'+Key)).forEach(function(input){
+      input.addEventListener('change', function(){
+        var parts = input.getAttribute('data-ryder-result-note').split('|');
+        var fmt=parts[0], pid=parts[1];
+        var rd2 = ryder();
+        var list = (rd2.pairings[fmt]||[]).map(function(p){
+          if(p.id!==pid) return p;
+          return Object.assign({}, p, { resultNote: input.value });
+        });
+        var patch = {}; patch['pairings.'+fmt] = list;
+        StoreOps.setRyder(patch).then(render);
+      });
+    });
+  }
+  function renderRyderScoreboard(rd){
+    var totals = ryderClassification(rd);
+    var leadA = totals.a > totals.b, leadB = totals.b > totals.a;
+    $('#ryderScoreboardBody').innerHTML =
+      '<div class="row" style="gap:18px;align-items:baseline;justify-content:center;flex-wrap:wrap;">' +
+        '<div style="text-align:center;min-width:100px;"><div style="font-size:34px;font-weight:700;'+(leadA?'color:var(--fairway);':'')+'">'+fmtRyderPts(totals.a)+'</div><div class="hint">'+esc(rd.teamNames.a)+'</div></div>' +
+        '<b style="color:var(--muted);font-size:20px;">–</b>' +
+        '<div style="text-align:center;min-width:100px;"><div style="font-size:34px;font-weight:700;'+(leadB?'color:var(--fairway);':'')+'">'+fmtRyderPts(totals.b)+'</div><div class="hint">'+esc(rd.teamNames.b)+'</div></div>' +
+      '</div>';
+    $('#ryderScoreboardSub').textContent = totals.total===0
+      ? 'Todavía no hay partidos creados en ningún formato — se irá rellenando según añadas parejas/partidos abajo.'
+      : (totals.played + ' de ' + totals.total + ' partidos con resultado anotado' + (totals.played<totals.total ? ' (quedan '+(totals.total-totals.played)+' por jugar).' : ' — ¡Ryder completa!'));
   }
   function renderRyder(){
+    // Con RYDER_PUBLIC en false (ver comentario junto a su declaración), nadie sin el PIN debe
+    // ver nada de esta pestaña todavía — ni el botón, ni la Clasificación. El botón de la
+    // pestaña se controla aquí (no solo al desbloquear el PIN) para que reaccione también a
+    // este interruptor en cualquier render, no solo justo después de meter el PIN.
+    var canSeeTab = RYDER_PUBLIC || adminUnlocked;
+    $('#ryderTabBtn').hidden = !canSeeTab;
+    if(!canSeeTab){
+      $('#ryderScoreboardCard').hidden = true;
+      $('#ryderLockedNotice').hidden = true;
+      $('#ryderUnlocked').hidden = true;
+      return;
+    }
+    // Cuando sí se puede ver la pestaña (RYDER_PUBLIC=true, o admin con el PIN metido), la
+    // Clasificación se pinta siempre, tenga o no el PIN metido — solo editar el evento (más
+    // abajo) sigue exigiéndolo.
+    $('#ryderScoreboardCard').hidden = false;
+    var rd = ryder();
+    renderRyderScoreboard(rd);
     if(!adminUnlocked){ $('#ryderLockedNotice').hidden=false; $('#ryderUnlocked').hidden=true; return; }
     $('#ryderLockedNotice').hidden = true; $('#ryderUnlocked').hidden = false;
-    var rd = ryder();
     renderRyderSettings(rd);
     renderRyderCourseTee(rd);
     renderRyderTeamRefSelects(rd);
@@ -3690,13 +4165,38 @@
       StoreOps.setRyder(patch).then(render);
     });
   });
+  $('#rdHcpAllowance').addEventListener('change', function(){
+    var v = parseFloat(this.value);
+    if(isNaN(v)) return;
+    // Sin tope de 100 (a diferencia de los % de golpes concedidos): un comité de torneo podría
+    // en teoría fijar más del 100%, aunque lo normal sea 100% o menos.
+    StoreOps.setRyder({ hcpAllowance: Math.max(0, v) / 100 }).then(render);
+  });
+  // Añade `count` parejas/partidos vacíos de golpe al formato `key` — usado tanto por "+ Añadir
+  // pareja/partido" (count=1) como por los botones "Rellenar hasta N" (pedido el 27/8/2026, para
+  // no tener que pulsar "+ Añadir" 6 o 12 veces seguidas: en el Excel esas filas ya venían fijas
+  // — Fourball y Foursome con 6 parejas, Individual con 12 partidos).
+  function ryderAddPairs(key, count){
+    var rd = ryder();
+    var teamSize = RYDER_FORMATS[key].teamSize;
+    var newOnes = [];
+    for(var i=0;i<count;i++){
+      newOnes.push({ id: ryderNewId(), a: teamSize===2 ? [null,null] : null, b: teamSize===2 ? [null,null] : null });
+    }
+    var patch = {}; patch['pairings.'+key] = (rd.pairings[key]||[]).concat(newOnes);
+    return StoreOps.setRyder(patch).then(render);
+  }
   Object.keys(RYDER_FORMATS).forEach(function(key){
-    $('#rdAddPair'+cap1(key)).addEventListener('click', function(){
-      var rd = ryder();
-      var teamSize = RYDER_FORMATS[key].teamSize;
-      var newPair = { id: ryderNewId(), a: teamSize===2 ? [null,null] : null, b: teamSize===2 ? [null,null] : null };
-      var patch = {}; patch['pairings.'+key] = (rd.pairings[key]||[]).concat([newPair]);
-      StoreOps.setRyder(patch).then(render);
+    $('#rdAddPair'+cap1(key)).addEventListener('click', function(){ ryderAddPairs(key, 1); });
+  });
+  $all('[data-ryder-fill]').forEach(function(btn){
+    var parts = btn.getAttribute('data-ryder-fill').split('|');
+    var key = parts[0], target = parseInt(parts[1], 10);
+    btn.addEventListener('click', function(){
+      var have = (ryder().pairings[key]||[]).length;
+      var missing = target - have;
+      if(missing <= 0) return;
+      ryderAddPairs(key, missing);
     });
   });
 
