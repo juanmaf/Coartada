@@ -15,3 +15,9 @@ window.HCP_FIREBASE_CONFIG = {
   messagingSenderId: "795795380487",
   appId: "1:795795380487:web:02a284e60eff50f974cda2"
 };
+
+// Clave pública de reCAPTCHA Enterprise para Firebase App Check (ver SETUP.md, Parte 3) —
+// protege la única función de backend del proyecto ("Cargar rondas desde una captura") para
+// que solo tu propia página, cargada de verdad en un navegador, pueda usarla — no sirve para
+// nada más y, como el resto de este fichero, no es un secreto que haya que esconder.
+window.HCP_RECAPTCHA_SITE_KEY = "6Lci9ZstAAAAANxwuweKmSAL87MhR2EhVGRhXldt";
