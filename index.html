@@ -398,6 +398,51 @@
     <!-- RONDAS -->
     <section class="view" id="view-rondas">
       <div class="stack">
+        <!-- "Cargar rondas desde una captura" (27/8/2026): oculta sola si HCP_RECAPTCHA_SITE_KEY
+             no está configurada todavía (ver firebase-config.js y SETUP.md, Parte 3) — controlado
+             por initScreenshotImportUi(). No requiere PIN de admin: cualquier jugador identificado
+             puede usarla, pero nada se guarda hasta que la misma persona aprueba cada fila. -->
+        <div class="card" id="ssCard" hidden>
+          <div class="section-head">
+            <div><h2>Cargar rondas desde una captura</h2><p>Sube una foto o captura del marcador de una partida (de cualquier app de golf) — te propongo una ronda por jugador detectado, tú confirmas el campo/barra y apruebas cada una antes de que se guarde nada.</p></div>
+          </div>
+          <div id="ssIdle">
+            <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="ssFileInput" accept="image/*">
+              <button type="button" class="btn primary" id="ssParseBtn" disabled>Leer captura</button>
+            </div>
+            <p class="hint">Elige una foto o captura de pantalla del marcador y pulsa "Leer captura".</p>
+          </div>
+          <div id="ssLoading" hidden><p class="hint">Leyendo la captura…</p></div>
+          <div id="ssError" hidden style="color:var(--critical);font-size:13px;margin-top:8px;"></div>
+          <div id="ssReview" hidden>
+            <div class="grid2" style="margin-top:10px;">
+              <div class="field" style="margin:0;">
+                <label for="ssCourseSearch">Campo jugado</label>
+                <div class="combo">
+                  <input type="text" id="ssCourseSearch" autocomplete="off" placeholder="Escribe para buscar un campo…">
+                  <input type="hidden" id="ssCourse">
+                  <div class="combo-menu" id="ssCourseMenu" hidden></div>
+                </div>
+              </div>
+              <div class="field" style="margin:0;">
+                <label for="ssTeeSelect">Barra</label>
+                <select id="ssTeeSelect"><option value="">Elige campo primero</option></select>
+              </div>
+            </div>
+            <div class="field" style="max-width:220px;">
+              <label for="ssDate">Fecha</label>
+              <input type="date" id="ssDate">
+            </div>
+            <p class="hint">Confirma el campo, la barra y la fecha jugados — se usan para todas las filas de esta captura.</p>
+            <div id="ssRowsWrap"></div>
+            <div class="row" style="gap:8px;margin-top:12px;">
+              <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
+              <button type="button" class="btn" id="ssCancel">Cancelar / empezar de nuevo</button>
+            </div>
+          </div>
+        </div>
+
         <div class="row">
           <div class="card" style="flex:1 1 340px;">
             <div class="section-head"><div><h2>Añadir ronda</h2><p>Campo, hándicap de juego y puntos Stableford. Nada más.</p></div></div>
@@ -482,51 +527,6 @@
             </div>
             <div id="importSuspiciousReview" hidden style="margin-top:14px;"></div>
           </details>
-        </div>
-
-        <!-- "Cargar rondas desde una captura" (27/8/2026): oculta sola si HCP_RECAPTCHA_SITE_KEY
-             no está configurada todavía (ver firebase-config.js y SETUP.md, Parte 3) — controlado
-             por initScreenshotImportUi(). No requiere PIN de admin: cualquier jugador identificado
-             puede usarla, pero nada se guarda hasta que la misma persona aprueba cada fila. -->
-        <div class="card" id="ssCard" hidden>
-          <div class="section-head">
-            <div><h2>Cargar rondas desde una captura</h2><p>Sube una foto o captura del marcador de una partida (de cualquier app de golf) — te propongo una ronda por jugador detectado, tú confirmas el campo/barra y apruebas cada una antes de que se guarde nada.</p></div>
-          </div>
-          <div id="ssIdle">
-            <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap;">
-              <input type="file" id="ssFileInput" accept="image/*">
-              <button type="button" class="btn primary" id="ssParseBtn" disabled>Leer captura</button>
-            </div>
-            <p class="hint">Elige una foto o captura de pantalla del marcador y pulsa "Leer captura".</p>
-          </div>
-          <div id="ssLoading" hidden><p class="hint">Leyendo la captura…</p></div>
-          <div id="ssError" hidden style="color:var(--critical);font-size:13px;margin-top:8px;"></div>
-          <div id="ssReview" hidden>
-            <div class="grid2" style="margin-top:10px;">
-              <div class="field" style="margin:0;">
-                <label for="ssCourseSearch">Campo jugado</label>
-                <div class="combo">
-                  <input type="text" id="ssCourseSearch" autocomplete="off" placeholder="Escribe para buscar un campo…">
-                  <input type="hidden" id="ssCourse">
-                  <div class="combo-menu" id="ssCourseMenu" hidden></div>
-                </div>
-              </div>
-              <div class="field" style="margin:0;">
-                <label for="ssTeeSelect">Barra</label>
-                <select id="ssTeeSelect"><option value="">Elige campo primero</option></select>
-              </div>
-            </div>
-            <div class="field" style="max-width:220px;">
-              <label for="ssDate">Fecha</label>
-              <input type="date" id="ssDate">
-            </div>
-            <p class="hint">Confirma el campo, la barra y la fecha jugados — se usan para todas las filas de esta captura.</p>
-            <div id="ssRowsWrap"></div>
-            <div class="row" style="gap:8px;margin-top:12px;">
-              <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
-              <button type="button" class="btn" id="ssCancel">Cancelar / empezar de nuevo</button>
-            </div>
-          </div>
         </div>
 
         <div class="card">
@@ -1006,7 +1006,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-27.11";
+  var APP_VERSION = "2026-08-27.12";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
