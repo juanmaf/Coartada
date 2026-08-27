@@ -508,6 +508,7 @@
               <select id="rf2Wind"><option value="">Todo</option><option value="fuerte">Fuerte (≥30 km/h)</option><option value="normal">Normal</option></select>
             </div>
             <button type="button" class="btn small" id="rf2Clear">Quitar filtros</button>
+            <button type="button" class="btn small" id="rf2Export">Exportar CSV</button>
           </div>
           <div id="rf2Subtotals" style="margin-top:16px;"></div>
         </div>
@@ -892,7 +893,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-26.3";
+  var APP_VERSION = "2026-08-26.4";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -2213,14 +2214,23 @@
       '<div><b style="font-size:12.5px;">Viento:</b> '+bucketRow(windBucket, {fuerte:'Fuerte (≥30 km/h)', normal:'Normal'}, ['normal','fuerte'])+'</div>';
   }
 
-  function renderRoundsFeed(){
-    applyRoundsDefaultOnce();
+  // Mismas reglas de visibilidad + filtros que pinta la tabla de Rondas, pero sin el tope de 20
+  // — la usan tanto los subtotales como la exportación a CSV, que siempre debe llevarse todo lo
+  // que cumple el filtro actual (si el filtro de jugador está puesto, es justo "las rondas de
+  // ese jugador"), no solo lo que se ve en pantalla por defecto.
+  function visibleFilteredRounds(){
     var id = myId();
     var admin = adminUnlocked;
     var rs = rounds().slice().sort(cmpDateDesc);
     var visible = rs.filter(function(r){ return r.status==='aprobada' || r.player===id || admin; });
+    return visible.filter(passesRoundsFilter);
+  }
+  function renderRoundsFeed(){
+    applyRoundsDefaultOnce();
+    var id = myId();
+    var admin = adminUnlocked;
     renderRoundsFilterControls();
-    var filtered = visible.filter(passesRoundsFilter);
+    var filtered = visibleFilteredRounds();
     // Los subtotales usan siempre la selección completa (no el tope de 20) para que la
     // comparativa por clima tenga una muestra decente; el tope solo afecta a la tabla.
     renderRoundsSubtotals(filtered);
@@ -2252,6 +2262,57 @@
       });
     });
   }
+
+  // ---------- Exportar rondas a CSV (pestaña Rondas) ----------
+  // Exporta justo lo que el filtro de arriba tiene seleccionado — si hay un jugador puesto,
+  // eso ya es "las rondas de ese jugador"; si está en "Todos", exporta todo lo visible. Nunca
+  // limitado a las 20 de la tabla (visibleFilteredRounds() es la lista completa, sin el tope).
+  // Pedido el 26/8/2026: "que se puedan exportar las rondas de cada usuario, por cada usuario".
+  function csvField(v){
+    var s = (v==null ? '' : String(v));
+    if(/[;"\n\r]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+  function slugify(s){
+    return String(s||'')
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'rondas';
+  }
+  function roundsToCsv(list){
+    var headers = ['Fecha','Jugador','Campo','Barra','Par','CR','SR','HCP juego','Stableford','Score bruto','Diferencial','Estado','Temp. max (°C)','Precipitación (mm)','Viento max (km/h)'];
+    var lines = [headers.map(csvField).join(';')];
+    list.forEach(function(r){
+      var w = r.weather;
+      var row = [
+        r.date, pname(r.player), r.course, r.tee, r.par, r.cr, r.sr,
+        r.mode==='raw' ? '' : r.hcp,
+        r.mode==='raw' ? '' : r.stableford,
+        r.mode==='raw' ? r.score : '',
+        r.differential.toFixed(1), r.status,
+        w && typeof w.tmax==='number' ? w.tmax : '',
+        w && typeof w.precip==='number' ? w.precip : '',
+        w && typeof w.windMax==='number' ? w.windMax : ''
+      ];
+      lines.push(row.map(csvField).join(';'));
+    });
+    return lines.join('\r\n');
+  }
+  function downloadTextFile(filename, text, mime){
+    // BOM inicial para que Excel en español abra los acentos bien sin preguntar nada.
+    var blob = new Blob(['﻿'+text], { type: (mime||'text/csv')+';charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+  }
+  $('#rf2Export').addEventListener('click', function(){
+    var list = visibleFilteredRounds();
+    if(list.length===0){ return; }
+    var playerFilterName = roundsFilter.player ? pname(roundsFilter.player) : null;
+    var filename = 'rondas-' + (playerFilterName ? slugify(playerFilterName) : 'todos') + '-' + todayIso() + '.csv';
+    downloadTextFile(filename, roundsToCsv(list));
+  });
 
   // Últimas 20 rondas aprobadas del jugador identificado en este dispositivo, marcando
   // cuáles de ellas son las que realmente se usan para calcular su hándicap actual (las
@@ -2942,6 +3003,13 @@
     });
   });
 
+  // Id de la barra que se está renombrando ahora mismo (una a la vez) — solo mientras dura la
+  // edición, no se guarda en ningún sitio. Renombrar una barra es puramente cosmético (el color
+  // es solo una etiqueta): no toca las rondas ya guardadas, que llevan su propio par/CR/SR
+  // grabados al añadirlas, así que no hay riesgo de descuadrar ningún hándicap ya calculado.
+  // Pedido el 26/8/2026 al ver que Laukariz tenía barras "Amarillas (variante)"/"(variante 2)"
+  // en vez de nombres que digan qué combinación de 9 hoyos son de verdad.
+  var renamingTeeId = null;
   function renderCoursesTable(){
     var ts = tees();
     var tbody = $('#coursesTable tbody');
@@ -2952,11 +3020,20 @@
     var out = '';
     Object.keys(byCourse).sort().forEach(function(cName){
       byCourse[cName].forEach(function(t,i){
-        var badge = t.hidden ? ' <span class="pill muted" title="No se ofrece para rondas nuevas; las rondas que ya la usan no cambian.">obsoleta</span>' : '';
-        var action = adminUnlocked
-          ? '<button class="btn small" data-toggle-tee-hidden="'+esc(t.id)+'" data-hidden="'+(t.hidden?'1':'0')+'">'+(t.hidden?'Mostrar':'Ocultar')+'</button>'
-          : '';
-        out += '<tr><td>'+(i===0?esc(cName):'')+'</td><td>'+esc(t.color)+badge+'</td><td class="num">'+t.par+'</td><td class="num">'+t.cr+'</td><td class="num">'+t.sr+'</td><td>'+action+'</td></tr>';
+        var colorCell, action;
+        if(adminUnlocked && renamingTeeId === t.id){
+          colorCell = '<input type="text" data-rename-tee-input="'+esc(t.id)+'" value="'+esc(t.color)+'" style="width:100%;">';
+          action = '<button class="btn small primary" data-rename-tee-save="'+esc(t.id)+'">Guardar</button> ' +
+                   '<button type="button" class="btn small" data-rename-tee-cancel="1">Cancelar</button>';
+        } else {
+          var badge = t.hidden ? ' <span class="pill muted" title="No se ofrece para rondas nuevas; las rondas que ya la usan no cambian.">obsoleta</span>' : '';
+          colorCell = esc(t.color) + badge;
+          action = adminUnlocked
+            ? '<button class="btn small" data-toggle-tee-hidden="'+esc(t.id)+'" data-hidden="'+(t.hidden?'1':'0')+'">'+(t.hidden?'Mostrar':'Ocultar')+'</button> ' +
+              '<button type="button" class="btn small" data-rename-tee="'+esc(t.id)+'">Renombrar</button>'
+            : '';
+        }
+        out += '<tr><td>'+(i===0?esc(cName):'')+'</td><td>'+colorCell+'</td><td class="num">'+t.par+'</td><td class="num">'+t.cr+'</td><td class="num">'+t.sr+'</td><td>'+action+'</td></tr>';
       });
     });
     tbody.innerHTML = out;
@@ -2965,6 +3042,33 @@
         var id = btn.getAttribute('data-toggle-tee-hidden');
         var isHidden = btn.getAttribute('data-hidden') === '1';
         StoreOps.updateTee(id, { hidden: !isHidden }).then(render);
+      });
+    });
+    $all('[data-rename-tee]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        renamingTeeId = btn.getAttribute('data-rename-tee');
+        renderCoursesTable();
+        var input = $('[data-rename-tee-input="'+renamingTeeId+'"]', tbody);
+        if(input){ input.focus(); input.select(); }
+      });
+    });
+    $all('[data-rename-tee-cancel]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){ renamingTeeId = null; renderCoursesTable(); });
+    });
+    function saveRename(id){
+      var input = $('[data-rename-tee-input="'+id+'"]', tbody);
+      var val = input ? input.value.trim() : '';
+      if(!val) return;
+      StoreOps.updateTee(id, { color: val }).then(function(){ renamingTeeId = null; render(); });
+    }
+    $all('[data-rename-tee-save]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){ saveRename(btn.getAttribute('data-rename-tee-save')); });
+    });
+    $all('[data-rename-tee-input]', tbody).forEach(function(input){
+      input.addEventListener('keydown', function(ev){
+        var id = input.getAttribute('data-rename-tee-input');
+        if(ev.key === 'Enter'){ ev.preventDefault(); saveRename(id); }
+        else if(ev.key === 'Escape'){ renamingTeeId = null; renderCoursesTable(); }
       });
     });
   }
