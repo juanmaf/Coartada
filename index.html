@@ -755,25 +755,36 @@
           </div>
 
           <div class="card">
-            <div class="section-head"><div><h2>Datos del evento</h2><p>El campo y barra del torneo se usan para calcular el hándicap de juego de todos, igual que en Rondas.</p></div></div>
-            <form id="ryderEventForm">
-              <div class="grid2">
-                <div class="field"><label for="rdName">Nombre del evento</label><input type="text" id="rdName" placeholder="Ej. Ryder Pucela Cup 2026 – Oliva Nova"></div>
-                <div class="field"><label for="rdDates">Fechas</label><input type="text" id="rdDates" placeholder="19-20 septiembre 2026"></div>
+            <div class="section-head"><div><h2>Datos del evento</h2><p>El campo y barra del torneo se usan para calcular el hándicap de juego de todos, igual que en Rondas. Todo en esta tarjeta se guarda solo, al momento — no hace falta ningún botón de guardar.</p></div></div>
+            <div class="grid2">
+              <div class="field"><label for="rdName">Nombre del evento</label><input type="text" id="rdName" placeholder="Ej. Ryder Pucela Cup 2026 – Oliva Nova"></div>
+              <div class="field"><label for="rdDates">Fechas</label><input type="text" id="rdDates" placeholder="19-20 septiembre 2026"></div>
+            </div>
+            <div class="grid2">
+              <div class="field"><label for="rdTeamRefA">Equipo A</label><select id="rdTeamRefA"></select></div>
+              <div class="field"><label for="rdTeamRefB">Equipo B</label><select id="rdTeamRefB"></select></div>
+            </div>
+            <p class="hint" style="margin:-6px 0 12px;">Los equipos son los que ya existen en la pestaña Equipos. Los jugadores de la app se añaden solos según su equipo ahí — debajo solo hace falta añadir a los invitados que no usan la app (o a algún jugador de la app sin equipo asignado).</p>
+            <div class="grid2">
+              <div class="field" style="margin:0;">
+                <label for="rdCourseSearch">Campo del torneo</label>
+                <div class="combo">
+                  <input type="text" id="rdCourseSearch" autocomplete="off" placeholder="Escribe para buscar un campo…">
+                  <input type="hidden" id="rdCourse">
+                  <div class="combo-menu" id="rdCourseMenu" hidden></div>
+                </div>
               </div>
-              <div class="grid2">
-                <div class="field"><label for="rdTeamRefA">Equipo A</label><select id="rdTeamRefA"></select></div>
-                <div class="field"><label for="rdTeamRefB">Equipo B</label><select id="rdTeamRefB"></select></div>
+              <div class="field" style="margin:0;">
+                <label for="rdTeeSelect">Barra</label>
+                <select id="rdTeeSelect"><option value="">Elige campo primero</option></select>
               </div>
-              <p class="hint" style="margin:-6px 0 12px;">Los equipos son los que ya existen en la pestaña Equipos. Los jugadores de la app se añaden solos según su equipo ahí — debajo solo hace falta añadir a los invitados que no usan la app (o a algún jugador de la app sin equipo asignado).</p>
-              <label>Barra del campo del torneo</label>
-              <div class="grid3">
-                <div class="field"><label for="rdPar">Par</label><input type="number" id="rdPar" step="1"></div>
-                <div class="field"><label for="rdCr">CR</label><input type="number" id="rdCr" step="0.1"></div>
-                <div class="field"><label for="rdSr">Slope</label><input type="number" id="rdSr" step="1"></div>
-              </div>
-              <button class="btn primary" type="submit">Guardar datos del evento</button>
-            </form>
+            </div>
+            <p class="hint" style="margin:6px 0 12px;">Par, CR y Slope se rellenan solos al elegir la barra — son los mismos datos que ya usa la pestaña Rondas para ese campo. Si el campo del torneo no está en la lista, añádelo primero desde la pestaña Campos (con su Par/CR/Slope oficiales) y luego elígelo aquí.</p>
+            <div class="grid3">
+              <div class="field"><label for="rdPar">Par</label><input type="number" id="rdPar" step="1" readonly></div>
+              <div class="field"><label for="rdCr">CR</label><input type="number" id="rdCr" step="0.1" readonly></div>
+              <div class="field"><label for="rdSr">Slope</label><input type="number" id="rdSr" step="1" readonly></div>
+            </div>
           </div>
 
           <div class="card">
@@ -894,7 +905,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-27.4";
+  var APP_VERSION = "2026-08-27.5";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -3337,7 +3348,7 @@
       teamRefs: teamRefs,
       teamNames: { a: nameFor('a'), b: nameFor('b') },
       excludedPlayerIds: r.excludedPlayerIds || [],
-      tee: Object.assign({ par: 72, cr: 72, sr: 113 }, r.tee || {}),
+      tee: Object.assign({ par: 72, cr: 72, sr: 113, course: '', color: '' }, r.tee || {}),
       allowances: Object.assign({ fourball: 0.75, foursome: 0.5, greensomeLow: 0.6, greensomeHigh: 0.4, individual: 0.75 }, r.allowances || {}),
       roster: r.roster || [],
       pairings: Object.assign({ fourball: [], foursome: [], greensome: [], individual: [] }, r.pairings || {})
@@ -3404,9 +3415,6 @@
   function renderRyderSettings(rd){
     setValIfNotFocused('#rdName', rd.eventName);
     setValIfNotFocused('#rdDates', rd.dates);
-    setValIfNotFocused('#rdPar', rd.tee.par);
-    setValIfNotFocused('#rdCr', rd.tee.cr);
-    setValIfNotFocused('#rdSr', rd.tee.sr);
     setValIfNotFocused('#rdAllowFourball', Math.round(rd.allowances.fourball*100));
     setValIfNotFocused('#rdAllowFoursome', Math.round(rd.allowances.foursome*100));
     setValIfNotFocused('#rdAllowGreensomeLow', Math.round(rd.allowances.greensomeLow*100));
@@ -3414,6 +3422,41 @@
     setValIfNotFocused('#rdAllowIndividual', Math.round(rd.allowances.individual*100));
     $('#ryderTeamLabelA').textContent = rd.teamNames.a;
     $('#ryderTeamLabelB').textContent = rd.teamNames.b;
+  }
+  // Campo/barra del torneo — elegidos de la BBDD de campos (igual que en Rondas), en vez de
+  // escribir Par/CR/Slope a mano. Pedido el 27/8/2026 tras detectar que, además, el formulario
+  // anterior (Nombre/Fechas/Par/CR/Slope juntos en un único botón "Guardar") se rompía de una
+  // forma muy confusa: cualquier otro control de la pestaña (elegir Equipo A/B, añadir un
+  // jugador, tocar un % de golpes concedidos…) dispara `render()`, y `render()` vuelve a pintar
+  // esos campos con el último valor GUARDADO — así que si escribías un Slope nuevo y luego,
+  // antes de pulsar "Guardar", tocabas el desplegable de Equipo A, tu Slope recién escrito
+  // desaparecía y volvía al de antes, dando la sensación de que "elegir el equipo cambiaba el
+  // slope". Al pasar Par/CR/Slope a solo lectura (se rellenan solos al elegir campo+barra, y esa
+  // elección se guarda al instante, igual que el resto de controles de esta pestaña) ese hueco
+  // desaparece: ya no hay ningún campo con un valor sin guardar esperando a que lo pise el
+  // siguiente render.
+  function populateRyderTeeSelect(courseName){
+    var sel = $('#rdTeeSelect');
+    var ts = sortTeesByColorGroup(tees().filter(function(t){ return t.course===courseName && !t.hidden; }));
+    var keep = sel.value;
+    if(!courseName || ts.length===0){ sel.innerHTML = '<option value="">Elige campo primero</option>'; return; }
+    sel.innerHTML = '<option value="">Elige barra…</option>' + ts.map(function(t){
+      return '<option value="'+esc(t.color)+'">'+esc(t.color)+' (CR '+t.cr+' / SR '+t.sr+' / Par '+t.par+')</option>';
+    }).join('');
+    if(ts.some(function(t){ return t.color===keep; })) sel.value = keep;
+  }
+  var rdCourseCombo = courseCombo($('#rdCourseSearch'), $('#rdCourse'), $('#rdCourseMenu'), courseNamesWithSelectableTee);
+  function renderRyderCourseTee(rd){
+    var searchEl = $('#rdCourseSearch');
+    if(document.activeElement !== searchEl && $('#rdCourse').value !== (rd.tee.course || '')){
+      rdCourseCombo.setValue(rd.tee.course || '');
+    }
+    populateRyderTeeSelect($('#rdCourse').value);
+    var teeSel = $('#rdTeeSelect');
+    if(document.activeElement !== teeSel && $('#rdCourse').value) teeSel.value = rd.tee.color || '';
+    setValIfNotFocused('#rdPar', rd.tee.par);
+    setValIfNotFocused('#rdCr', rd.tee.cr);
+    setValIfNotFocused('#rdSr', rd.tee.sr);
   }
   function renderRyderTeamRefSelects(rd){
     var ts = teams();
@@ -3580,21 +3623,34 @@
     $('#ryderLockedNotice').hidden = true; $('#ryderUnlocked').hidden = false;
     var rd = ryder();
     renderRyderSettings(rd);
+    renderRyderCourseTee(rd);
     renderRyderTeamRefSelects(rd);
     renderRyderAddPlayerSelect('a', rd); renderRyderAddPlayerSelect('b', rd);
     renderRyderRosterCol('a', rd); renderRyderRosterCol('b', rd);
     Object.keys(RYDER_FORMATS).forEach(function(key){ renderRyderFormatCard(key, rd); });
   }
-  $('#ryderEventForm').addEventListener('submit', function(e){
-    e.preventDefault();
-    var patch = {
-      eventName: $('#rdName').value,
-      dates: $('#rdDates').value,
-      'tee.par': parseInt($('#rdPar').value,10) || 72,
-      'tee.cr': parseFloat($('#rdCr').value) || 72,
-      'tee.sr': parseInt($('#rdSr').value,10) || 113
-    };
-    StoreOps.setRyder(patch).then(render);
+  // Nombre y fechas se guardan solos al salir del campo (blur/change), igual que el resto de
+  // controles de esta pestaña — antes solo se guardaban con un botón "Guardar" compartido con
+  // Par/CR/Slope, y sufrían el mismo problema descrito arriba (un re-render disparado por
+  // cualquier otro control podía pisar lo que se acababa de escribir si no se había guardado
+  // todavía).
+  $('#rdName').addEventListener('change', function(){ StoreOps.setRyder({ eventName: this.value }).then(render); });
+  $('#rdDates').addEventListener('change', function(){ StoreOps.setRyder({ dates: this.value }).then(render); });
+  $('#rdCourse').addEventListener('change', function(){
+    populateRyderTeeSelect(this.value);
+    $('#rdTeeSelect').value = '';
+    // Un campo elegido pero sin barra todavía elegida: no se guarda nada hasta elegir barra
+    // (abajo), así nunca se pisa un Par/CR/Slope ya guardado con un estado a medias.
+  });
+  $('#rdTeeSelect').addEventListener('change', function(){
+    var courseName = $('#rdCourse').value;
+    var teeColor = this.value;
+    var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
+    if(!tee) return;
+    StoreOps.setRyder({
+      'tee.course': courseName, 'tee.color': teeColor,
+      'tee.par': tee.par, 'tee.cr': tee.cr, 'tee.sr': tee.sr
+    }).then(render);
   });
   ['a','b'].forEach(function(side){
     $('#rdTeamRef'+side.toUpperCase()).addEventListener('change', function(){
