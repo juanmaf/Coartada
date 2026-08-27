@@ -8,7 +8,7 @@
 // Sigue SETUP.md paso a paso para crear el proyecto y generar estos valores.
 
 window.HCP_FIREBASE_CONFIG = {
-  apiKey: "AIzaSyCcNF9fIUJVZzakEaivriI7_qFLAaftsSg",
+  apiKey: "AIzaSyCcNF9fIUJVZzakEaivriI7_qFLAafts5g",
   authDomain: "coartadagolf.firebaseapp.com",
   projectId: "coartadagolf",
   storageBucket: "coartadagolf.firebasestorage.app",
