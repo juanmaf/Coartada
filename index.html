@@ -1052,7 +1052,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.17";
+  var APP_VERSION = "2026-08-28.18";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1305,6 +1305,17 @@
   function significantTokens(normalized){
     return normalized.split(' ').filter(function(w){ return w && !GENERIC_COURSE_WORDS[w] && !TEE_COLOR_WORDS[w]; });
   }
+  // Un campo marcado como "9 hoyos"/"18 hoyos" es una valoración DISTINTA del mismo club, con su
+  // propio Par/CR/Slope — nunca debe confundirse con el nombre "base" sin ese matiz, ni con la
+  // valoración del otro número de hoyos, aunque el nombre de club coincida o uno esté contenido
+  // en el otro (bug real detectado el 28/8/2026: rondas de 9 hoyos de Entrepinos se enlazaron
+  // por error con "Club de Golf Entrepinos", la valoración de 18, solo por compartir el nombre
+  // del club — ver findExistingCourseName más abajo).
+  var HOLE_QUALIFIER_RE = /\b(9|18)\s*hoyos?\b/;
+  function holeQualifier(normalized){
+    var m = normalized.match(HOLE_QUALIFIER_RE);
+    return m ? m[1] : null;
+  }
   // Compara dos nombres ya normalizados (normName) y decide si probablemente son el mismo club,
   // en tres niveles cada vez más permisivos: igualdad exacta; contención textual (uno dentro del
   // otro, como antes); y por último, conjunto de palabras significativas (sin contar "golf",
@@ -1313,6 +1324,7 @@
   // Deportivo Golf Saldaña de Burgos" → ambos reducen a incluir "saldaña").
   function courseNamesLikelyMatch(a, b){
     if(a === b) return true;
+    if(holeQualifier(a) !== holeQualifier(b)) return false;
     if(a.length>=4 && b.length>=4 && (a.indexOf(b)!==-1 || b.indexOf(a)!==-1)) return true;
     var ta = significantTokens(a), tb = significantTokens(b);
     // Antes bastaba con UNA palabra significativa compartida — eso disparaba falsos positivos
@@ -3787,12 +3799,15 @@
       tbody.innerHTML = '<tr><td colspan="5" class="empty">Ninguna ronda sospechosa por ahora.</td></tr>';
       return;
     }
-    hint.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;">' + list.length + ' ronda(s) con diferencial fuera de lo normal (&lt; '+SUSPICIOUS_DIFF_LOW+' o &gt; '+SUSPICIOUS_DIFF_HIGH+').</div>';
+    hint.innerHTML = '<div class="pill warning" style="display:block;padding:10px 12px;">' + list.length + ' ronda(s) con diferencial fuera de lo normal (&lt; '+SUSPICIOUS_DIFF_LOW+' o &gt; '+SUSPICIOUS_DIFF_HIGH+'). Si es porque el campo/barra no era el que de verdad se jugó (p. ej. 9 hoyos comparados con la valoración de 18), usa "Cambiar campo/barra" para corregirlo sin perder la ronda.</div>';
     tbody.innerHTML = list.map(function(r){
-      return '<tr><td>'+esc(r.date)+'</td><td>'+esc(pname(r.player))+'</td><td>'+esc(r.course)+' ('+esc(r.tee)+')</td>' +
+      return '<tr data-susp-row="'+esc(r.id)+'"><td>'+esc(r.date)+'</td><td>'+esc(pname(r.player))+'</td>' +
+        '<td data-susp-coursecell="'+esc(r.id)+'">'+esc(r.course)+' ('+esc(r.tee)+')</td>' +
         '<td class="num">'+r.differential.toFixed(1)+'</td>' +
-        '<td style="white-space:nowrap;"><button class="btn small" data-susp-dismiss="'+esc(r.id)+'">No es un error</button> ' +
-        '<button class="btn small danger" data-susp-delete="'+esc(r.id)+'">Borrar</button></td></tr>';
+        '<td style="white-space:nowrap;">' +
+          '<button class="btn small" data-susp-editcourse="'+esc(r.id)+'">Cambiar campo/barra</button> ' +
+          '<button class="btn small" data-susp-dismiss="'+esc(r.id)+'">No es un error</button> ' +
+          '<button class="btn small danger" data-susp-delete="'+esc(r.id)+'">Borrar</button></td></tr>';
     }).join('');
     $all('[data-susp-dismiss]', tbody).forEach(function(btn){
       btn.addEventListener('click', function(){
@@ -3807,6 +3822,60 @@
         deleteRoundWithLog(round, 'borrada desde el indicador de rondas sospechosas').then(render);
       }, { timeoutMs: 3000 });
     });
+    $all('[data-susp-editcourse]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var round = rounds().find(function(x){ return x.id === btn.getAttribute('data-susp-editcourse'); });
+        if(round) openSuspiciousCourseEditor(round);
+      });
+    });
+  }
+
+  // Reasigna una ronda sospechosa a otro campo/barra ya existente (pedido el 28/8/2026: el caso
+  // real que lo motivó fueron rondas de 9 hoyos enlazadas por error con la valoración de 18 del
+  // mismo club, dando un diferencial absurdo) — recalcula el diferencial con los datos de la
+  // barra nueva, con la misma fórmula que ya usa cada modo de ronda ('raw': score bruto directo;
+  // 'sf': Stableford + hcp de juego), sin tocar nada más de la ronda.
+  function openSuspiciousCourseEditor(round){
+    var row = document.querySelector('[data-susp-row="'+round.id+'"]');
+    var courseCell = row && row.querySelector('[data-susp-coursecell]');
+    if(!row || !courseCell) return;
+    var uid = 'susp-edit-' + round.id;
+    courseCell.innerHTML =
+      '<div class="combo" style="min-width:200px;">' +
+        '<input type="text" id="'+uid+'-search" autocomplete="off" value="'+esc(round.course)+'">' +
+        '<input type="hidden" id="'+uid+'-course" value="'+esc(round.course)+'">' +
+        '<div class="combo-menu" id="'+uid+'-menu" hidden></div>' +
+      '</div>' +
+      '<select id="'+uid+'-tee" style="margin-top:4px;"><option value="">Elige barra…</option></select>';
+    courseCombo($('#'+uid+'-search'), $('#'+uid+'-course'), $('#'+uid+'-menu'), courseNamesWithSelectableTee);
+    function populateEditTee(courseName){
+      var sel = document.getElementById(uid+'-tee');
+      var ts = sortTeesByColorGroup(tees().filter(function(t){ return t.course===courseName && !t.hidden; }));
+      if(!courseName || ts.length===0){ sel.innerHTML = '<option value="">Elige campo primero</option>'; return; }
+      sel.innerHTML = ts.map(function(t){
+        return '<option value="'+esc(t.color)+'"'+(courseName===round.course && t.color===round.tee ? ' selected':'')+'>'+esc(t.color)+' (CR '+t.cr+' / SR '+t.sr+' / Par '+t.par+')</option>';
+      }).join('');
+    }
+    populateEditTee(round.course);
+    document.getElementById(uid+'-course').addEventListener('change', function(){ populateEditTee(this.value); });
+
+    var actionsCell = row.querySelector('td:last-child');
+    actionsCell.innerHTML =
+      '<button type="button" class="btn small primary" data-susp-savecourse="'+round.id+'">Guardar</button> ' +
+      '<button type="button" class="btn small" data-susp-cancelcourse="'+round.id+'">Cancelar</button>';
+    document.querySelector('[data-susp-savecourse="'+round.id+'"]').addEventListener('click', function(){
+      var newCourse = document.getElementById(uid+'-course').value;
+      var newTeeColor = document.getElementById(uid+'-tee').value;
+      var newTee = tees().find(function(t){ return t.course===newCourse && t.color===newTeeColor; });
+      if(!newCourse || !newTee) return;
+      var newDiff = (round.mode === 'raw' && typeof round.score === 'number')
+        ? round1((round.score - newTee.cr) * 113 / newTee.sr)
+        : round1((newTee.par + 36 - round.stableford + round.hcp - newTee.cr) * 113 / newTee.sr);
+      StoreOps.updateRound(round.id, {
+        course: newCourse, tee: newTeeColor, cr: newTee.cr, sr: newTee.sr, par: newTee.par, differential: newDiff
+      }).then(render);
+    });
+    document.querySelector('[data-susp-cancelcourse="'+round.id+'"]').addEventListener('click', renderSuspiciousRounds);
   }
 
   // ---------- Papelera: rondas borradas (por su propio jugador, o por el admin) ----------
