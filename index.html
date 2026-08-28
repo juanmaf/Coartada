@@ -474,6 +474,9 @@
                 <span id="ssConfirmedSummary" style="font-weight:600;color:var(--ink);"></span>
                 <button type="button" class="btn small" id="ssChangeCourse">Cambiar</button>
               </p>
+              <!-- Leyenda breve de los iconos, una sola vez para toda la lista (pedido el
+                   28/8/2026) — no se repite en cada fila. -->
+              <p class="hint" style="margin:2px 0 6px;">⚠️ posible ronda duplicada · 🆕 marcar si es jugador nuevo · ✓ aprobar esa fila</p>
               <div id="ssRowsWrap" class="ss-rows"></div>
               <div class="row" style="gap:8px;margin-top:12px;">
                 <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
@@ -1049,7 +1052,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.16";
+  var APP_VERSION = "2026-08-28.17";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -2350,6 +2353,15 @@
         return callScreenshotParser(b64, file.type);
       }).then(function(result){
         $('#ssLoading').hidden = true;
+        // Pedido el 28/8/2026: algunas apps de golf tienen pestañas para ver el mismo marcador
+        // por golpes o por Stableford — si la captura viene de la vista de golpes (no Stableford),
+        // los números no significan lo mismo y no hay que dejar seguir con el resto del flujo.
+        if(result.esStableford === false){
+          $('#ssIdle').hidden = false;
+          $('#ssError').hidden = false;
+          $('#ssError').textContent = 'Esta captura parece ser del resultado por golpes, no de Stableford. Sube la captura de la pestaña "Stableford" (o "Stableford NET") de esa misma app.';
+          return;
+        }
         ssData = {
           rows: (result.filas || []).map(function(f){
             var match = bestPlayerMatch(f.nombre);
