@@ -489,6 +489,9 @@
                 <div class="kv"><span>Score ajustado estimado</span><span class="num" id="rf-preview-score">–</span></div>
                 <div class="kv"><span>Diferencial de esta ronda</span><span class="num" id="rf-preview-diff">–</span></div>
               </div>
+              <div class="field" id="rf-dup-warning" hidden>
+                <p class="pill warning" style="display:inline-block;">Posible duplicado: ya tienes una ronda igual ese día, en ese campo, con ese mismo resultado. Pulsa "Guardar ronda" otra vez si de verdad quieres guardarla igualmente.</p>
+              </div>
               <button class="btn primary" type="submit" style="width:100%;">Guardar ronda</button>
             </form>
           </div>
@@ -1006,7 +1009,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-27.12";
+  var APP_VERSION = "2026-08-27.14";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -2005,6 +2008,14 @@
   $('#rf-tee').addEventListener('change', updateSuggestedHcp);
   $('#rf-hcp').addEventListener('input', updatePreview);
 
+  // Aviso de posible ronda duplicada también en el alta manual (pedido el 27/8/2026: "que se
+  // aplicara a todas las rondas que se introducen, con los mismos criterios") — mismo criterio
+  // que en "Cargar rondas desde una captura" (findPossibleDuplicateRound, definida más abajo):
+  // jugador + campo + fecha + resultado Stableford exactos. No bloquea el guardado — solo avisa
+  // y exige un segundo clic en "Guardar ronda" para confirmar, igual que el resto de avisos no
+  // críticos de la app. Cualquier cambio en el formulario después del aviso lo vuelve a ocultar
+  // y obliga a comprobarlo de nuevo (por si el cambio ya deja de ser un duplicado, o pasa a serlo).
+  var roundFormDupConfirmed = false;
   $('#roundForm').addEventListener('submit', function(e){
     e.preventDefault();
     var pid = myId();
@@ -2024,6 +2035,16 @@
     if(!pid || !players().some(function(p){return p.id===pid;})){ openOnboard(); return; }
     if(!tee || !date || isNaN(hcp) || isNaN(pts)) return;
 
+    if(!roundFormDupConfirmed){
+      var dup = findPossibleDuplicateRound(pid, courseName, date, pts);
+      if(dup){
+        roundFormDupConfirmed = true;
+        $('#rf-dup-warning').hidden = false;
+        return;
+      }
+    }
+    $('#rf-dup-warning').hidden = true;
+
     var adjScore = tee.par + 36 - pts + hcp;
     var diff = round1((adjScore - tee.cr) * 113 / tee.sr);
     var status = config().autoApprove ? 'aprobada' : 'pendiente';
@@ -2036,6 +2057,8 @@
       $('#rf-stableford-rel').value = '0';
       updateStablefordUI();
       $('#rf-preview').hidden = true;
+      $('#rf-dup-warning').hidden = true;
+      roundFormDupConfirmed = false;
       formDirty = false;
       render();
       applyUpdateNowIfSafe();
@@ -2088,6 +2111,19 @@
     return rounds().find(function(r){
       return r.player===playerId && r.course===courseName && r.date===dateIso &&
         r.mode==='sf' && typeof r.stableford==='number' && r.stableford===stableford;
+    }) || null;
+  }
+
+  // Misma idea que findPossibleDuplicateRound, pero para rondas importadas de CSV (mode:'raw'),
+  // que no tienen resultado Stableford propio — ahí el criterio equivalente es jugador + campo +
+  // fecha + score bruto exactos (pedido el 27/8/2026: mismo aviso "para todas las rondas que se
+  // introducen"). Se usa al importar CSV para no reinsertar filas que ya estaban en la base
+  // (por ejemplo, si alguien vuelve a pegar el mismo CSV por error).
+  function findPossibleDuplicateRawRound(playerId, courseName, dateIso, score){
+    if(!playerId || !courseName || !dateIso || typeof score !== 'number') return null;
+    return rounds().find(function(r){
+      return r.player===playerId && r.course===courseName && r.date===dateIso &&
+        r.mode==='raw' && typeof r.score==='number' && r.score===score;
     }) || null;
   }
 
@@ -2147,16 +2183,25 @@
         return '<div class="card" style="margin-top:8px;padding:10px 12px;color:var(--fairway);">✓ '+esc(row.nombreDetectado || '(sin nombre)')+' — ronda guardada.</div>';
       }
       var resultadoNum = (row.resultado==='' || row.resultado==null) ? null : Number(row.resultado);
-      var dup = canApproveAny && row.playerId && resultadoNum!=null
+      var dup = canApproveAny && !row.isNewPlayer && row.playerId && resultadoNum!=null
         ? findPossibleDuplicateRound(row.playerId, courseName, dateVal, resultadoNum) : null;
       var playerOptions = '<option value="">-- elige jugador --</option>' + playerOptionsBase.map(function(p){
         return '<option value="'+esc(p.id)+'"'+(p.id===row.playerId?' selected':'')+'>'+esc(p.name)+'</option>';
       }).join('');
-      var canApprove = canApproveAny && row.playerId && row.hcp!=='' && row.hcp!=null && resultadoNum!=null;
+      // Según la casilla "jugador nuevo": o se elige entre los ya existentes, o se escribe el
+      // nombre para crear uno nuevo de verdad (pedido el 27/8/2026, ver comentario más arriba).
+      var playerField = row.isNewPlayer
+        ? '<div class="field" style="margin:6px 0;"><label>Nombre del jugador nuevo</label><input type="text" data-ss-newname="'+row.id+'" value="'+esc(row.newPlayerName)+'"></div>'
+        : '<div class="field" style="margin:6px 0;"><label>Jugador</label><select data-ss-player="'+row.id+'">'+playerOptions+'</select></div>';
+      var canApprove = canApproveAny && row.hcp!=='' && row.hcp!=null && resultadoNum!=null &&
+        (row.isNewPlayer ? !!String(row.newPlayerName||'').trim() : !!row.playerId);
       return '<div class="card" style="margin-top:8px;padding:10px 12px;">' +
         '<div class="hint">Detectado en la captura: "'+esc(row.nombreDetectado || '(sin nombre)')+'"</div>' +
+        '<label style="display:flex;align-items:center;gap:6px;margin:4px 0 8px;font-size:13px;">' +
+          '<input type="checkbox" data-ss-isnew="'+row.id+'"'+(row.isNewPlayer?' checked':'')+'> Jugador nuevo (esta sería su 1ª ronda)' +
+        '</label>' +
         '<div class="grid3">' +
-          '<div class="field" style="margin:6px 0;"><label>Jugador</label><select data-ss-player="'+row.id+'">'+playerOptions+'</select></div>' +
+          playerField +
           '<div class="field" style="margin:6px 0;"><label>HCP</label><input type="number" step="0.1" data-ss-hcp="'+row.id+'" value="'+esc(row.hcp)+'"></div>' +
           '<div class="field" style="margin:6px 0;"><label>Stableford</label><input type="number" step="1" data-ss-resultado="'+row.id+'" value="'+esc(row.resultado)+'"></div>' +
         '</div>' +
@@ -2169,6 +2214,22 @@
         var row = ssData.rows.find(function(r){ return r.id===sel.getAttribute('data-ss-player'); });
         if(row) row.playerId = sel.value;
         renderSsRows();
+      });
+    });
+    $all('[data-ss-isnew]', wrap).forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var row = ssData.rows.find(function(r){ return r.id===cb.getAttribute('data-ss-isnew'); });
+        if(row){
+          row.isNewPlayer = cb.checked;
+          if(row.isNewPlayer && !row.newPlayerName) row.newPlayerName = row.nombreDetectado;
+        }
+        renderSsRows();
+      });
+    });
+    $all('[data-ss-newname]', wrap).forEach(function(inp){
+      inp.addEventListener('input', function(){
+        var row = ssData.rows.find(function(r){ return r.id===inp.getAttribute('data-ss-newname'); });
+        if(row) row.newPlayerName = inp.value;
       });
     });
     $all('[data-ss-hcp]', wrap).forEach(function(inp){
@@ -2190,22 +2251,35 @@
     });
   }
 
+  // Crea un jugador nuevo desde "Cargar rondas desde una captura", cuando el nombre detectado en
+  // la imagen no coincide con nadie ya existente y se ha marcado explícitamente la casilla
+  // "jugador nuevo" (pedido el 27/8/2026 — antes no había forma de indicarlo, y solo se podía
+  // elegir entre jugadores ya existentes). Mismo formato de id que en el alta por onboarding.
+  function createNewPlayerForSs(name){
+    var id = 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+    return StoreOps.setPlayer(id, { name: name, team: '' }).then(function(){ return id; });
+  }
+
   function approveSsRow(rowId){
     var row = ssData && ssData.rows.find(function(r){ return r.id===rowId; });
     if(!row) return;
     var courseName = $('#ssCourse').value, teeColor = $('#ssTeeSelect').value, dateVal = $('#ssDate').value;
     var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
     var hcp = parseFloat(row.hcp), pts = parseFloat(row.resultado);
-    if(!row.playerId || !tee || !dateVal || isNaN(hcp) || isNaN(pts)) return;
+    var newName = row.isNewPlayer ? String(row.newPlayerName||'').trim() : '';
+    if((row.isNewPlayer ? !newName : !row.playerId) || !tee || !dateVal || isNaN(hcp) || isNaN(pts)) return;
     var adjScore = tee.par + 36 - pts + hcp;
     var diff = round1((adjScore - tee.cr) * 113 / tee.sr);
     var status = config().autoApprove ? 'aprobada' : 'pendiente';
     row.approved = true; // marca optimista; se revierte si falla el guardado
     renderSsRows();
-    StoreOps.addRound({
-      player: row.playerId, course: courseName, tee: teeColor, date: dateVal,
-      stableford: pts, hcp: hcp, cr: tee.cr, sr: tee.sr, par: tee.par,
-      differential: diff, status: status, mode: 'sf'
+    (row.isNewPlayer ? createNewPlayerForSs(newName) : Promise.resolve(row.playerId)).then(function(pid){
+      row.playerId = pid;
+      return StoreOps.addRound({
+        player: pid, course: courseName, tee: teeColor, date: dateVal,
+        stableford: pts, hcp: hcp, cr: tee.cr, sr: tee.sr, par: tee.par,
+        differential: diff, status: status, mode: 'sf'
+      });
     }).then(function(ref){
       render();
       applyUpdateNowIfSafe();
@@ -2238,10 +2312,15 @@
         ssData = {
           rows: (result.filas || []).map(function(f){
             var match = bestPlayerMatch(f.nombre);
+            // Si no se reconoce a nadie parecido, se marca de entrada como "jugador nuevo" en
+            // vez de dejarlo en blanco sin más — pedido el 27/8/2026: la app debe "indicarlo",
+            // no dar por hecho silenciosamente que es alguien ya existente ni crearlo sin avisar.
             return {
               id: 'ssr' + (ssRowIdSeq++),
               nombreDetectado: f.nombre || '',
               playerId: match ? match.id : '',
+              isNewPlayer: !match,
+              newPlayerName: f.nombre || '',
               hcp: (typeof f.hcp === 'number') ? f.hcp : '',
               resultado: (typeof f.resultado === 'number') ? f.resultado : '',
               approved: false
@@ -2271,7 +2350,9 @@
       if(!ssData || !ssReadyToApprove()) return;
       var courseName = $('#ssCourse').value, dateVal = $('#ssDate').value;
       ssData.rows.slice().forEach(function(row){
-        if(row.approved || !row.playerId || row.hcp==='' || row.hcp==null || row.resultado==='' || row.resultado==null) return;
+        if(row.approved || row.hcp==='' || row.hcp==null || row.resultado==='' || row.resultado==null) return;
+        if(row.isNewPlayer) return; // los jugadores nuevos se aprueban de uno en uno, a propósito
+        if(!row.playerId) return;
         var dup = findPossibleDuplicateRound(row.playerId, courseName, dateVal, Number(row.resultado));
         if(dup) return; // las que avisan de posible duplicado se aprueban a mano, una a una
         approveSsRow(row.id);
@@ -2392,7 +2473,16 @@
     if(newTeesToCreate.length){ await StoreOps.batchAddTees(newTeesToCreate); }
 
     var status = config().autoApprove ? 'aprobada' : 'pendiente';
-    var roundsToInsert = resolved.map(function(r){
+    // Aviso de posible ronda duplicada también aquí (27/8/2026): si una fila del CSV coincide en
+    // jugador + campo + fecha + score con una ronda ya existente, lo más probable es que este CSV
+    // (o una parte de él) ya se hubiera importado antes — se salta esa fila en vez de duplicarla,
+    // y se informa cuántas se han saltado en el resumen final.
+    var dupSkipped = 0;
+    var roundsToInsert = resolved.filter(function(r){
+      var dup = findPossibleDuplicateRawRound(pid, r.course, r.date, r.score);
+      if(dup){ dupSkipped++; return false; }
+      return true;
+    }).map(function(r){
       var diff = round1((r.score - r.cr) * 113 / r.sr);
       return {
         player: pid, course: r.course, tee: r.tee, date: r.date, score: r.score,
@@ -2422,6 +2512,9 @@
     }
     if(newTeesToCreate.length){
       summary += ' ' + newTeesToCreate.length + ' barra(s) nueva(s) creada(s) como "Amarillas" (edítalas en la pestaña Campos si conoces el color real).';
+    }
+    if(dupSkipped){
+      summary += ' ' + dupSkipped + ' fila(s) no importada(s) por ser posibles duplicados (mismo jugador+campo+fecha+score ya existente).';
     }
     var suspicious = insertedWithIds.filter(isSuspiciousRound);
     if(suspicious.length){
@@ -4218,8 +4311,8 @@
   // ocurre si no hay nada sin guardar; si lo hay, se espera a que se envíe la ronda (o se
   // avisa con un banner y un botón para recargar cuando la persona quiera).
   var formDirty = false, updateAvailable = false;
-  $('#roundForm').addEventListener('input', function(){ formDirty = true; });
-  $('#roundForm').addEventListener('change', function(){ formDirty = true; });
+  $('#roundForm').addEventListener('input', function(){ formDirty = true; roundFormDupConfirmed = false; $('#rf-dup-warning').hidden = true; });
+  $('#roundForm').addEventListener('change', function(){ formDirty = true; roundFormDupConfirmed = false; $('#rf-dup-warning').hidden = true; });
 
   function applyUpdateNowIfSafe(){
     if(updateAvailable && !formDirty){ location.reload(); }
