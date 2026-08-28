@@ -205,6 +205,30 @@
   .btn.small{ padding:5px 10px; font-size:12.5px; }
   .btn[disabled]{ opacity:.45; cursor:not-allowed; }
 
+  /* Filas compactas de revisión en "Cargar rondas desde una captura" (pedido el 28/8/2026: antes
+     cada fila era una tarjeta grande con etiquetas y un aviso en párrafo aparte — con muchos
+     jugadores en una misma captura eso obligaba a mucho scroll. Ahora es una lista de filas
+     finas, con iconos en vez de texto largo para "posible duplicado" y "aprobar"). */
+  .ss-rows{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .ss-row{
+    display:flex; align-items:center; gap:8px; padding:6px 10px; border:1px solid var(--line);
+    border-radius:9px; background:var(--plane);
+  }
+  .ss-row.is-dup{ border-color:var(--warning); background:var(--warning-bg); }
+  .ss-row.is-saved{ border-color:var(--good); color:var(--fairway); font-size:13.5px; padding:8px 12px; }
+  .ss-row-name{ flex:1 1 auto; min-width:0; }
+  .ss-row-name select, .ss-row-name input[type=text]{ padding:6px 8px; font-size:13.5px; }
+  .ss-row-newchip{
+    display:flex; align-items:center; gap:3px; font-size:15px; color:var(--ink-2);
+    white-space:nowrap; cursor:pointer; flex:0 0 auto; opacity:.55;
+  }
+  .ss-row-newchip:has(input:checked){ opacity:1; }
+  .ss-row-newchip input{ width:auto; margin:0; }
+  .ss-row input[type=number]{ width:54px; flex:0 0 auto; padding:6px 5px; font-size:13.5px; text-align:right; }
+  .ss-dup-icon{ flex:0 0 auto; font-size:16px; cursor:help; }
+  .ss-approve-icon{ flex:0 0 auto; width:32px; height:32px; padding:0; font-size:16px; }
+  @media (max-width:640px){ .ss-row{ flex-wrap:wrap; } .ss-row-name{ flex-basis:100%; } }
+
   .modal-backdrop{
     position:fixed; inset:0; background:rgba(10,14,10,.5); display:flex; align-items:center; justify-content:center;
     padding:20px; z-index:50;
@@ -416,29 +440,45 @@
           <div id="ssLoading" hidden><p class="hint">Leyendo la captura…</p></div>
           <div id="ssError" hidden style="color:var(--critical);font-size:13px;margin-top:8px;"></div>
           <div id="ssReview" hidden>
-            <div class="grid2" style="margin-top:10px;">
-              <div class="field" style="margin:0;">
-                <label for="ssCourseSearch">Campo jugado</label>
-                <div class="combo">
-                  <input type="text" id="ssCourseSearch" autocomplete="off" placeholder="Escribe para buscar un campo…">
-                  <input type="hidden" id="ssCourse">
-                  <div class="combo-menu" id="ssCourseMenu" hidden></div>
+            <!-- Paso 1: confirmar campo/barra/fecha ANTES de ver nada más (pedido el 28/8/2026:
+                 que sea lo primero que se pregunta, de forma simple y visual) — hasta confirmar,
+                 la lista de jugadores detectados ni siquiera se muestra. -->
+            <div id="ssConfirmStep">
+              <p class="hint" style="margin-top:0;">Antes de ver las rondas detectadas, confirma esto:</p>
+              <div class="grid2" style="margin-top:10px;">
+                <div class="field" style="margin:0;">
+                  <label for="ssCourseSearch">Campo jugado</label>
+                  <div class="combo">
+                    <input type="text" id="ssCourseSearch" autocomplete="off" placeholder="Escribe para buscar un campo…">
+                    <input type="hidden" id="ssCourse">
+                    <div class="combo-menu" id="ssCourseMenu" hidden></div>
+                  </div>
+                </div>
+                <div class="field" style="margin:0;">
+                  <label for="ssTeeSelect">Barra</label>
+                  <select id="ssTeeSelect"><option value="">Elige campo primero</option></select>
                 </div>
               </div>
-              <div class="field" style="margin:0;">
-                <label for="ssTeeSelect">Barra</label>
-                <select id="ssTeeSelect"><option value="">Elige campo primero</option></select>
+              <div class="field" style="max-width:220px;">
+                <label for="ssDate">Fecha</label>
+                <input type="date" id="ssDate">
+              </div>
+              <div class="row" style="gap:8px;margin-top:4px;">
+                <button type="button" class="btn primary" id="ssConfirmCourse" disabled>✓ Confirmar campo, barra y fecha</button>
+                <button type="button" class="btn" id="ssCancelStep1">Cancelar</button>
               </div>
             </div>
-            <div class="field" style="max-width:220px;">
-              <label for="ssDate">Fecha</label>
-              <input type="date" id="ssDate">
-            </div>
-            <p class="hint">Confirma el campo, la barra y la fecha jugados — se usan para todas las filas de esta captura.</p>
-            <div id="ssRowsWrap"></div>
-            <div class="row" style="gap:8px;margin-top:12px;">
-              <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
-              <button type="button" class="btn" id="ssCancel">Cancelar / empezar de nuevo</button>
+            <!-- Paso 2: ya confirmado arriba, ahora solo la lista compacta de jugadores. -->
+            <div id="ssPlayersStep" hidden>
+              <p class="hint" style="margin-top:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span id="ssConfirmedSummary" style="font-weight:600;color:var(--ink);"></span>
+                <button type="button" class="btn small" id="ssChangeCourse">Cambiar</button>
+              </p>
+              <div id="ssRowsWrap" class="ss-rows"></div>
+              <div class="row" style="gap:8px;margin-top:12px;">
+                <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
+                <button type="button" class="btn" id="ssCancel">Cancelar / empezar de nuevo</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1009,7 +1049,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-27.14";
+  var APP_VERSION = "2026-08-28.16";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -2178,9 +2218,12 @@
     var canApproveAny = ssReadyToApprove();
     var wrap = $('#ssRowsWrap');
     var playerOptionsBase = players().slice().sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
+    // Lista compacta (pedido el 28/8/2026): una fila fina por jugador, con iconos en vez de
+    // texto largo para "posible duplicado" (⚠️, con el detalle en el title/tooltip) y "aprobar"
+    // (✓), pensada para revisar de un vistazo capturas con muchos jugadores sin apenas scroll.
     wrap.innerHTML = ssData.rows.map(function(row){
       if(row.approved){
-        return '<div class="card" style="margin-top:8px;padding:10px 12px;color:var(--fairway);">✓ '+esc(row.nombreDetectado || '(sin nombre)')+' — ronda guardada.</div>';
+        return '<div class="ss-row is-saved">✓ '+esc(row.nombreDetectado || '(sin nombre)')+' — guardada.</div>';
       }
       var resultadoNum = (row.resultado==='' || row.resultado==null) ? null : Number(row.resultado);
       var dup = canApproveAny && !row.isNewPlayer && row.playerId && resultadoNum!=null
@@ -2191,22 +2234,20 @@
       // Según la casilla "jugador nuevo": o se elige entre los ya existentes, o se escribe el
       // nombre para crear uno nuevo de verdad (pedido el 27/8/2026, ver comentario más arriba).
       var playerField = row.isNewPlayer
-        ? '<div class="field" style="margin:6px 0;"><label>Nombre del jugador nuevo</label><input type="text" data-ss-newname="'+row.id+'" value="'+esc(row.newPlayerName)+'"></div>'
-        : '<div class="field" style="margin:6px 0;"><label>Jugador</label><select data-ss-player="'+row.id+'">'+playerOptions+'</select></div>';
+        ? '<input type="text" data-ss-newname="'+row.id+'" value="'+esc(row.newPlayerName)+'" placeholder="Nombre del jugador nuevo">'
+        : '<select data-ss-player="'+row.id+'">'+playerOptions+'</select>';
       var canApprove = canApproveAny && row.hcp!=='' && row.hcp!=null && resultadoNum!=null &&
         (row.isNewPlayer ? !!String(row.newPlayerName||'').trim() : !!row.playerId);
-      return '<div class="card" style="margin-top:8px;padding:10px 12px;">' +
-        '<div class="hint">Detectado en la captura: "'+esc(row.nombreDetectado || '(sin nombre)')+'"</div>' +
-        '<label style="display:flex;align-items:center;gap:6px;margin:4px 0 8px;font-size:13px;">' +
-          '<input type="checkbox" data-ss-isnew="'+row.id+'"'+(row.isNewPlayer?' checked':'')+'> Jugador nuevo (esta sería su 1ª ronda)' +
+      var dupTitle = dup ? 'Posible duplicado: '+pname(row.playerId)+' ya tiene una ronda igual ese día en ese campo — revísalo antes de aprobar.' : '';
+      return '<div class="ss-row'+(dup?' is-dup':'')+'" title="Detectado en la captura: '+esc(row.nombreDetectado || '(sin nombre)')+'">' +
+        '<div class="ss-row-name">'+playerField+'</div>' +
+        '<label class="ss-row-newchip" title="Marcar si es un jugador nuevo (sería su 1ª ronda)">' +
+          '<input type="checkbox" data-ss-isnew="'+row.id+'"'+(row.isNewPlayer?' checked':'')+'>🆕' +
         '</label>' +
-        '<div class="grid3">' +
-          playerField +
-          '<div class="field" style="margin:6px 0;"><label>HCP</label><input type="number" step="0.1" data-ss-hcp="'+row.id+'" value="'+esc(row.hcp)+'"></div>' +
-          '<div class="field" style="margin:6px 0;"><label>Stableford</label><input type="number" step="1" data-ss-resultado="'+row.id+'" value="'+esc(row.resultado)+'"></div>' +
-        '</div>' +
-        (dup ? '<p class="pill warning" style="display:inline-block;">Posible duplicado: '+esc(pname(row.playerId))+' ya tiene una ronda igual ese día en ese campo — revísalo antes de aprobar.</p>' : '') +
-        '<div><button type="button" class="btn small primary" data-ss-approve="'+row.id+'"'+(canApprove?'':' disabled')+'>Aprobar esta ronda</button></div>' +
+        '<input type="number" step="0.1" data-ss-hcp="'+row.id+'" value="'+esc(row.hcp)+'" placeholder="HCP" title="HCP">' +
+        '<input type="number" step="1" data-ss-resultado="'+row.id+'" value="'+esc(row.resultado)+'" placeholder="Pts" title="Stableford">' +
+        (dup ? '<span class="ss-dup-icon" title="'+esc(dupTitle)+'">⚠️</span>' : '') +
+        '<button type="button" class="btn small primary ss-approve-icon" data-ss-approve="'+row.id+'"'+(canApprove?'':' disabled')+' title="Aprobar esta ronda" aria-label="Aprobar esta ronda">✓</button>' +
       '</div>';
     }).join('');
     $all('[data-ss-player]', wrap).forEach(function(sel){
@@ -2327,9 +2368,24 @@
             };
           })
         };
-        if(result.campo){ ssCourseCombo.setValue(result.campo); populateSsTeeSelect(result.campo); }
+        if(result.campo){
+          // Se intenta resolver contra el nombre "canónico" ya existente (pedido el 28/8/2026:
+          // sin esto, un campo detectado como "Entrepinos" no coincidía con las rondas ya
+          // guardadas con el nombre completo "Club de Golf Entrepinos", y el aviso de posible
+          // duplicado nunca saltaba aunque la ronda ya estuviera — mismo mecanismo que ya usaba
+          // la importación de CSV, ver findExistingCourseName).
+          var resolvedCourse = findExistingCourseName(result.campo) || result.campo;
+          ssCourseCombo.setValue(resolvedCourse);
+          populateSsTeeSelect(resolvedCourse);
+        }
         $('#ssDate').value = result.fecha || '';
         $('#ssReview').hidden = false;
+        // Paso 1 primero (pedido el 28/8/2026): antes de ver ninguna ronda, se pregunta de forma
+        // simple si el campo/barra/fecha detectados son correctos. La lista de jugadores se
+        // calcula ya (renderSsRows), pero no se enseña hasta confirmar ese primer paso.
+        $('#ssConfirmStep').hidden = false;
+        $('#ssPlayersStep').hidden = true;
+        updateSsConfirmButtonState();
         renderSsRows();
       }).catch(function(err){
         $('#ssLoading').hidden = true;
@@ -2339,12 +2395,40 @@
       });
     });
 
+    function updateSsConfirmButtonState(){
+      $('#ssConfirmCourse').disabled = !ssReadyToApprove();
+    }
     $('#ssCourse').addEventListener('change', function(){
       populateSsTeeSelect(this.value);
+      updateSsConfirmButtonState();
       renderSsRows();
     });
-    $('#ssTeeSelect').addEventListener('change', renderSsRows);
-    $('#ssDate').addEventListener('change', renderSsRows);
+    $('#ssTeeSelect').addEventListener('change', function(){ updateSsConfirmButtonState(); renderSsRows(); });
+    $('#ssDate').addEventListener('change', function(){ updateSsConfirmButtonState(); renderSsRows(); });
+
+    $('#ssConfirmCourse').addEventListener('click', function(){
+      if(!ssReadyToApprove()) return;
+      var courseName = $('#ssCourse').value, teeColor = $('#ssTeeSelect').value, dateVal = $('#ssDate').value;
+      $('#ssConfirmedSummary').textContent = courseName + ' · ' + teeColor + ' · ' + fmtDateShort(dateVal, true);
+      $('#ssConfirmStep').hidden = true;
+      $('#ssPlayersStep').hidden = false;
+      renderSsRows();
+    });
+    $('#ssChangeCourse').addEventListener('click', function(){
+      $('#ssPlayersStep').hidden = true;
+      $('#ssConfirmStep').hidden = false;
+      updateSsConfirmButtonState();
+    });
+
+    function resetSsToIdle(){
+      ssData = null;
+      $('#ssFileInput').value = '';
+      $('#ssParseBtn').disabled = true;
+      $('#ssReview').hidden = true;
+      $('#ssError').hidden = true;
+      $('#ssIdle').hidden = false;
+    }
+    $('#ssCancelStep1').addEventListener('click', resetSsToIdle);
 
     $('#ssApproveAll').addEventListener('click', function(){
       if(!ssData || !ssReadyToApprove()) return;
@@ -2359,14 +2443,7 @@
       });
     });
 
-    $('#ssCancel').addEventListener('click', function(){
-      ssData = null;
-      $('#ssFileInput').value = '';
-      $('#ssParseBtn').disabled = true;
-      $('#ssReview').hidden = true;
-      $('#ssError').hidden = true;
-      $('#ssIdle').hidden = false;
-    });
+    $('#ssCancel').addEventListener('click', resetSsToIdle);
   }
   initScreenshotImportUi(); // primera pasada: ya revela la tarjeta si hay mock de test; si no, queda oculta
   screenshotImportInitPromise.then(function(ready){
