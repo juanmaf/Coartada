@@ -1052,7 +1052,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.18";
+  var APP_VERSION = "2026-08-28.19";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1600,6 +1600,27 @@
     }
     return '';
   }
+
+  // ---------- Insignia "Robin Hood" del Ranking (pedido el 28/8/2026) ----------
+  // Cualquier ronda aprobada con diferencial de -8 o mejor en los últimos 30 días — le "roba"
+  // puntos al campo — se marca junto al nombre del jugador. Si hay varias en el mes, se muestra
+  // la mejor (la de diferencial más bajo) en el aviso al pasar el ratón.
+  var ROBINHOOD_DIFF_MAX = -8;
+  function robinHoodRoundFor(playerId){
+    var since = isoDateNDaysAgo(30);
+    var candidates = approvedRoundsFor(playerId).filter(function(r){
+      return r.date > since && r.differential <= ROBINHOOD_DIFF_MAX;
+    });
+    if(candidates.length===0) return null;
+    candidates.sort(function(a,b){ return a.differential - b.differential; });
+    return candidates[0];
+  }
+  function robinHoodBadge(playerId){
+    var r = robinHoodRoundFor(playerId);
+    if(!r) return '';
+    return '<span title="Robin Hood: diferencial '+r.differential.toFixed(1)+' el '+fmtDateShort(r.date, true)+' ('+esc(r.course)+') — le robó puntos al campo en el último mes" style="cursor:default;">🏹</span> ';
+  }
+
   // Mejor y peor ronda de un jugador (por diferencial — es la única medida comparable entre
   // rondas de campos/pares distintos) dentro de un periodo: si se pasa `fromDateIsoExclusive`,
   // solo las rondas jugadas después de esa fecha (el mismo "periodo" que usa el ranking a
@@ -1826,7 +1847,7 @@
     }
     tbody.innerHTML = rows.map(function(x,i){
       var teamName = tms.find(function(t){return t.id===x.p.team;});
-      var base = '<tr><td class="num">'+(i+1)+'</td><td>'+trendBadge(x.p.id)+esc(x.p.name)+'</td><td>'+(teamName?esc(teamName.name):'—')+'</td>' +
+      var base = '<tr><td class="num">'+(i+1)+'</td><td>'+trendBadge(x.p.id)+robinHoodBadge(x.p.id)+esc(x.p.name)+'</td><td>'+(teamName?esc(teamName.name):'—')+'</td>' +
         '<td class="num">'+x.hci.toFixed(1)+'</td>';
       var extremesCells = showExt ? ('<td class="num">'+extremeCell(x.extremes.best)+'</td><td class="num">'+extremeCell(x.extremes.worst)+'</td>') : '';
       if(asOf){
