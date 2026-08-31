@@ -1052,7 +1052,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.19";
+  var APP_VERSION = "2026-08-28.20";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1601,24 +1601,29 @@
     return '';
   }
 
-  // ---------- Insignia "Robin Hood" del Ranking (pedido el 28/8/2026) ----------
-  // Cualquier ronda aprobada con diferencial de -8 o mejor en los últimos 30 días — le "roba"
-  // puntos al campo — se marca junto al nombre del jugador. Si hay varias en el mes, se muestra
-  // la mejor (la de diferencial más bajo) en el aviso al pasar el ratón.
-  var ROBINHOOD_DIFF_MAX = -8;
+  // ---------- Insignia "Robin Hood" del Ranking (pedido el 28/8/2026, corregido el 31/8/2026) ----------
+  // Ojo: el "-8" del pedido original no es el diferencial de hándicap (esa es una medida rara de
+  // ver para quien juega, y casi nunca baja de -8 salvo rondas ya de por sí "sospechosas") sino el
+  // resultado Stableford tal y como se introduce en el formulario, "respecto a 36 = jugar al
+  // hándicap" (el mismo criterio de #rf-stableford-rel): -8 o mejor = 44 puntos Stableford o más.
+  // Por eso solo aplica a rondas modo 'sf' (alta manual o captura) — las importadas por CSV en
+  // modo 'raw' (solo gross score) no tienen ese dato y quedan fuera, como pidió el usuario.
+  var ROBINHOOD_REL_MAX = -8;
+  function robinHoodRelResult(r){ return 36 - r.stableford; } // mismo signo que el desplegable del formulario
   function robinHoodRoundFor(playerId){
     var since = isoDateNDaysAgo(30);
     var candidates = approvedRoundsFor(playerId).filter(function(r){
-      return r.date > since && r.differential <= ROBINHOOD_DIFF_MAX;
+      return r.mode==='sf' && r.date > since && robinHoodRelResult(r) <= ROBINHOOD_REL_MAX;
     });
     if(candidates.length===0) return null;
-    candidates.sort(function(a,b){ return a.differential - b.differential; });
+    candidates.sort(function(a,b){ return robinHoodRelResult(a) - robinHoodRelResult(b); });
     return candidates[0];
   }
   function robinHoodBadge(playerId){
     var r = robinHoodRoundFor(playerId);
     if(!r) return '';
-    return '<span title="Robin Hood: diferencial '+r.differential.toFixed(1)+' el '+fmtDateShort(r.date, true)+' ('+esc(r.course)+') — le robó puntos al campo en el último mes" style="cursor:default;">🏹</span> ';
+    var rel = robinHoodRelResult(r);
+    return '<span title="Robin Hood: '+(rel>0?'+':'')+rel+' respecto a 36 ('+r.stableford+' puntos Stableford) el '+fmtDateShort(r.date, true)+' ('+esc(r.course)+') — le robó puntos al campo en el último mes" style="cursor:default;">🏹</span> ';
   }
 
   // Mejor y peor ronda de un jugador (por diferencial — es la única medida comparable entre
