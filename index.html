@@ -167,6 +167,18 @@
   .pill.muted{ background:var(--line); color:var(--ink-2); }
   .pill::before{ content:"●"; font-size:8px; }
 
+  /* Iconos con explicación (🔥/🥶 de tendencia, 🏹 Robin Hood): además del title de siempre
+     (hover en escritorio), responden al tap — en el móvil no hay "pasar el ratón" — mostrando
+     el mismo texto en un aviso breve abajo de la pantalla (pedido el 31/8/2026). */
+  .info-icon{ cursor:pointer; }
+  .tip-toast{
+    position:fixed; left:50%; bottom:18px; transform:translateX(-50%) translateY(0);
+    max-width:min(92vw, 420px); background:#1c1c1e; color:#fff; padding:10px 16px;
+    border-radius:10px; font-size:13.5px; line-height:1.4; text-align:center;
+    box-shadow:0 6px 20px rgba(0,0,0,.3); z-index:9999;
+  }
+  .tip-toast[hidden]{ display:none; }
+
   label{ display:block; font-size:12.5px; color:var(--ink-2); margin-bottom:4px; font-weight:600; }
   input[type=text], input[type=number], input[type=date], input[type=password], select, textarea{
     width:100%; padding:9px 10px; border-radius:8px; border:1px solid var(--line-strong);
@@ -1052,7 +1064,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.20";
+  var APP_VERSION = "2026-08-28.21";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1187,6 +1199,33 @@
   var $all = function(sel, root){ return Array.prototype.slice.call((root||document).querySelectorAll(sel)); };
   var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var round1 = function(x){ return Math.round(x*10)/10; };
+
+  // ---------- Aviso breve al tocar un icono con explicación (31/8/2026) ----------
+  // Los iconos 🔥/🥶/🏹 llevan su explicación en el atributo title de toda la vida, pero eso
+  // solo se ve pasando el ratón por encima — en el móvil no hay tal cosa. Un solo listener
+  // delegado (así vale para cualquier icono con class="info-icon", esté donde esté, aunque la
+  // tabla se vuelva a pintar entera) muestra el mismo texto en un aviso abajo del todo, tanto
+  // si se toca en el móvil como si se hace clic en el ordenador.
+  var tipToastTimer = null;
+  function showTip(text){
+    var el = document.getElementById('tipToast');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'tipToast';
+      el.className = 'tip-toast';
+      el.hidden = true;
+      document.body.appendChild(el);
+      el.addEventListener('click', function(){ el.hidden = true; });
+    }
+    el.textContent = text;
+    el.hidden = false;
+    clearTimeout(tipToastTimer);
+    tipToastTimer = setTimeout(function(){ el.hidden = true; }, 4000);
+  }
+  document.addEventListener('click', function(e){
+    var el = e.target.closest && e.target.closest('.info-icon');
+    if(el && el.getAttribute('data-tip')) showTip(el.getAttribute('data-tip'));
+  });
   function pname(pid){ var p = players().find(function(x){ return x.id===pid; }); return p ? p.name : '—'; }
   function catColor(idx){ return "var(--s"+((idx%8)+1)+")"; }
 
@@ -1593,10 +1632,12 @@
     var t = hciTrendFor(playerId);
     if(!t) return '';
     if(t.delta <= TREND_HOT_DELTA){
-      return '<span title="'+t.delta.toFixed(1)+' de hándicap en el último mes ('+t.n+' rondas) — en racha" style="cursor:default;">🔥</span> ';
+      var tipHot = t.delta.toFixed(1)+' de hándicap en el último mes ('+t.n+' rondas) — en racha';
+      return '<span class="info-icon" title="'+esc(tipHot)+'" data-tip="'+esc(tipHot)+'">🔥</span> ';
     }
     if(t.delta >= TREND_COLD_DELTA){
-      return '<span title="+'+t.delta.toFixed(1)+' de hándicap en el último mes ('+t.n+' rondas) — perdiendo fuelle" style="cursor:default;">🥶</span> ';
+      var tipCold = '+'+t.delta.toFixed(1)+' de hándicap en el último mes ('+t.n+' rondas) — perdiendo fuelle';
+      return '<span class="info-icon" title="'+esc(tipCold)+'" data-tip="'+esc(tipCold)+'">🥶</span> ';
     }
     return '';
   }
@@ -1623,7 +1664,8 @@
     var r = robinHoodRoundFor(playerId);
     if(!r) return '';
     var rel = robinHoodRelResult(r);
-    return '<span title="Robin Hood: '+(rel>0?'+':'')+rel+' respecto a 36 ('+r.stableford+' puntos Stableford) el '+fmtDateShort(r.date, true)+' ('+esc(r.course)+') — le robó puntos al campo en el último mes" style="cursor:default;">🏹</span> ';
+    var tip = 'Robin Hood: '+(rel>0?'+':'')+rel+' respecto a 36 ('+r.stableford+' puntos Stableford) el '+fmtDateShort(r.date, true)+' ('+r.course+') — le robó puntos al campo en el último mes';
+    return '<span class="info-icon" title="'+esc(tip)+'" data-tip="'+esc(tip)+'">🏹</span> ';
   }
 
   // Mejor y peor ronda de un jugador (por diferencial — es la única medida comparable entre
