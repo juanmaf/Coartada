@@ -1064,7 +1064,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.21";
+  var APP_VERSION = "2026-08-28.23";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1191,7 +1191,31 @@
     },
     updateTee: function(id, patch){ return updateDoc(doc(db,'tees', id), patch); },
     addCourseGeo: function(data){ return addDoc(collection(db,'courseGeo'), data); },
-    setRyder: function(patch){ return setDoc(doc(db,'ryder','main'), patch, { merge: true }); }
+    // Reportado el 31/8/2026 con dos síntomas distintos que resultaron ser el mismo fallo: al
+    // elegir Equipo A/B "el otro se vacía", y al elegir Campo/Barra del torneo "Par/CR/Slope
+    // quedan en blanco". La pestaña Ryder se vuelve a pintar entera con cada cambio de
+    // CUALQUIER colección (jugadores, equipos, rondas...), y esos renders leen siempre de
+    // `Store.ryder` — así que si ese dato local todavía no reflejaba lo que se acababa de tocar
+    // (porque la escritura real a Firestore, con su ida y vuelta, no había terminado todavía),
+    // un render de por medio volvía a pintar el control con el valor viejo, dando la sensación
+    // de que se "vaciaba" o "no cargaba". Aplicar aquí mismo el patch también en local — antes
+    // de esperar a que responda el servidor — hace que cualquier render intermedio ya vea el
+    // dato bueno, sin depender de lo rápido o lento que vaya la conexión de quien lo esté usando.
+    // Soporta tanto claves con puntos ('tee.course', 'teamRefs.a') como claves normales
+    // ('roster', 'eventName'...), igual que Firestore las interpreta en un set con merge.
+    setRyder: function(patch){
+      if(!Store.ryder) Store.ryder = {};
+      Object.keys(patch).forEach(function(key){
+        var parts = key.split('.');
+        var obj = Store.ryder;
+        for(var i=0;i<parts.length-1;i++){
+          if(typeof obj[parts[i]] !== 'object' || obj[parts[i]] === null) obj[parts[i]] = {};
+          obj = obj[parts[i]];
+        }
+        obj[parts[parts.length-1]] = patch[key];
+      });
+      return setDoc(doc(db,'ryder','main'), patch, { merge: true });
+    }
   };
 
   // ---------- helpers ----------
@@ -4006,6 +4030,20 @@
   };
   function ryderNewId(){ return 'rr_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function cap1(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+  // Guarda un cambio de la Ryder y pinta al instante (StoreOps.setRyder ya deja `Store.ryder`
+  // actualizado en local antes de escribir de verdad) — en vez de `.then(render)`, que esperaba
+  // a la ida y vuelta a Firestore y por eso se veía "en blanco"/"vacío" un momento con conexiones
+  // lentas (ver el comentario de StoreOps.setRyder). Se sigue devolviendo la promesa por si algún
+  // caller necesita encadenar algo después de que el servidor confirme.
+  function setRyderNow(patch){ var p = StoreOps.setRyder(patch); render(); return p; }
+  // Variante para los controles de cada pareja/partido (dentro de las tarjetas de cada formato):
+  // esas tarjetas se repintan enteras en cada render, así que si el control que cambió es un
+  // <select> (el de emparejar jugador, o el de anotar el resultado) y `render()` sustituye su
+  // propio contenedor MIENTRAS ese <select> todavía está terminando su propio evento 'change'
+  // (con el 'blur' que lo acompaña), Chromium lanza un error real: "The node to be removed is no
+  // longer a child of this node." Esperar un tick (imperceptible para quien lo usa) antes de
+  // pintar evita el choque, sin volver a la ida y vuelta completa a Firestore de antes.
+  function setRyderSoon(patch){ var p = StoreOps.setRyder(patch); setTimeout(render, 0); return p; }
   function ryder(){
     var r = Store.ryder || {};
     var teamRefs = Object.assign({ a: null, b: null }, r.teamRefs || {});
@@ -4233,24 +4271,24 @@
       bindConfirmDelete(btn, function(){
         var rd2 = ryder();
         var newRoster = rd2.roster.filter(function(x){ return x.id!==rid; });
-        StoreOps.setRyder({ roster: newRoster, pairings: ryderStripFromPairings(rd2.pairings, rid) }).then(render);
+        setRyderNow({ roster: newRoster, pairings: ryderStripFromPairings(rd2.pairings, rid) });
       }, { timeoutMs: 3000 });
     });
     $all('[data-ryder-exclude]', wrap).forEach(function(btn){
       var pid = btn.getAttribute('data-ryder-exclude');
       bindConfirmDelete(btn, function(){
         var rd2 = ryder();
-        StoreOps.setRyder({
+        setRyderNow({
           excludedPlayerIds: rd2.excludedPlayerIds.concat([pid]),
           pairings: ryderStripFromPairings(rd2.pairings, 'auto_'+pid)
-        }).then(render);
+        });
       }, { timeoutMs: 3000 });
     });
     $all('[data-ryder-readmit]', wrap).forEach(function(btn){
       btn.addEventListener('click', function(){
         var pid = btn.getAttribute('data-ryder-readmit');
         var rd2 = ryder();
-        StoreOps.setRyder({ excludedPlayerIds: rd2.excludedPlayerIds.filter(function(x){ return x!==pid; }) }).then(render);
+        setRyderNow({ excludedPlayerIds: rd2.excludedPlayerIds.filter(function(x){ return x!==pid; }) });
       });
     });
   }
@@ -4343,7 +4381,7 @@
           return np;
         });
         var patch = {}; patch['pairings.'+fmt] = list;
-        StoreOps.setRyder(patch).then(render);
+        setRyderSoon(patch);
       });
     });
     $all('[data-ryder-del-pair]', $('#rdPairs'+Key)).forEach(function(btn){
@@ -4352,7 +4390,7 @@
         var fmt=parts[0], pid=parts[1];
         var rd2 = ryder();
         var patch = {}; patch['pairings.'+fmt] = (rd2.pairings[fmt]||[]).filter(function(p){ return p.id!==pid; });
-        StoreOps.setRyder(patch).then(render);
+        setRyderSoon(patch);
       });
     });
     $all('[data-ryder-result]', $('#rdPairs'+Key)).forEach(function(sel){
@@ -4365,7 +4403,7 @@
           return Object.assign({}, p, { result: sel.value || null });
         });
         var patch = {}; patch['pairings.'+fmt] = list;
-        StoreOps.setRyder(patch).then(render);
+        setRyderSoon(patch);
       });
     });
     $all('[data-ryder-result-note]', $('#rdPairs'+Key)).forEach(function(input){
@@ -4378,7 +4416,7 @@
           return Object.assign({}, p, { resultNote: input.value });
         });
         var patch = {}; patch['pairings.'+fmt] = list;
-        StoreOps.setRyder(patch).then(render);
+        setRyderSoon(patch);
       });
     });
   }
@@ -4428,8 +4466,8 @@
   // Par/CR/Slope, y sufrían el mismo problema descrito arriba (un re-render disparado por
   // cualquier otro control podía pisar lo que se acababa de escribir si no se había guardado
   // todavía).
-  $('#rdName').addEventListener('change', function(){ StoreOps.setRyder({ eventName: this.value }).then(render); });
-  $('#rdDates').addEventListener('change', function(){ StoreOps.setRyder({ dates: this.value }).then(render); });
+  $('#rdName').addEventListener('change', function(){ setRyderNow({ eventName: this.value }); });
+  $('#rdDates').addEventListener('change', function(){ setRyderNow({ dates: this.value }); });
   $('#rdCourse').addEventListener('change', function(){
     populateRyderTeeSelect(this.value);
     $('#rdTeeSelect').value = '';
@@ -4441,15 +4479,22 @@
     var teeColor = this.value;
     var tee = tees().find(function(t){ return t.course===courseName && t.color===teeColor && !t.hidden; });
     if(!tee) return;
-    StoreOps.setRyder({
+    // Reportado el 31/8/2026: "Par/CR/Slope quedan en blanco" tras elegir campo y barra — mismo
+    // fallo que el de "elegir equipo A/B" (ver el comentario de StoreOps.setRyder), arreglado
+    // ahí de raíz: `setRyderNow` ya deja `Store.ryder.tee` al día en local antes de escribir de
+    // verdad, así que cualquier render de por medio (y esta pestaña se repinta muy a menudo, con
+    // cada cambio de cualquier colección) ya ve el dato bueno.
+    setRyderNow({
       'tee.course': courseName, 'tee.color': teeColor,
       'tee.par': tee.par, 'tee.cr': tee.cr, 'tee.sr': tee.sr
-    }).then(render);
+    });
   });
   ['a','b'].forEach(function(side){
     $('#rdTeamRef'+side.toUpperCase()).addEventListener('change', function(){
+      // Reportado el 31/8/2026: "cuando elijo uno el otro se vacía" — arreglado de raíz en
+      // `setRyderNow`/`StoreOps.setRyder` (ver su comentario), no aquí.
       var patch = {}; patch['teamRefs.'+side] = this.value || null;
-      StoreOps.setRyder(patch).then(render);
+      setRyderNow(patch);
     });
   });
   ['a','b'].forEach(function(team){
@@ -4459,7 +4504,7 @@
       if(!pid) return;
       var rd = ryder();
       var entry = { id: ryderNewId(), team: team, source:'player', playerId: pid };
-      StoreOps.setRyder({ roster: rd.roster.concat([entry]) }).then(render);
+      setRyderNow({ roster: rd.roster.concat([entry]) });
     });
     $('#ryderAddGuestBtn'+T).addEventListener('click', function(){
       var name = $('#ryderAddGuestName'+T).value.trim();
@@ -4467,10 +4512,8 @@
       var hcpVal = parseFloat($('#ryderAddGuestHcp'+T).value);
       var rd = ryder();
       var entry = { id: ryderNewId(), team: team, source:'manual', name: name, manualHci: isNaN(hcpVal) ? null : hcpVal };
-      StoreOps.setRyder({ roster: rd.roster.concat([entry]) }).then(function(){
-        $('#ryderAddGuestName'+T).value = ''; $('#ryderAddGuestHcp'+T).value = '';
-        render();
-      });
+      $('#ryderAddGuestName'+T).value = ''; $('#ryderAddGuestHcp'+T).value = '';
+      setRyderNow({ roster: rd.roster.concat([entry]) });
     });
   });
   Object.keys(RYDER_ALLOWANCE_FIELDS).forEach(function(key){
@@ -4481,7 +4524,7 @@
       var v = parseFloat(el.value);
       if(isNaN(v)) return;
       var patch = {}; patch[RYDER_ALLOWANCE_FIELDS[key]] = Math.max(0, Math.min(100, v)) / 100;
-      StoreOps.setRyder(patch).then(render);
+      setRyderNow(patch);
     });
   });
   $('#rdHcpAllowance').addEventListener('change', function(){
@@ -4489,7 +4532,7 @@
     if(isNaN(v)) return;
     // Sin tope de 100 (a diferencia de los % de golpes concedidos): un comité de torneo podría
     // en teoría fijar más del 100%, aunque lo normal sea 100% o menos.
-    StoreOps.setRyder({ hcpAllowance: Math.max(0, v) / 100 }).then(render);
+    setRyderNow({ hcpAllowance: Math.max(0, v) / 100 });
   });
   // Añade `count` parejas/partidos vacíos de golpe al formato `key` — usado tanto por "+ Añadir
   // pareja/partido" (count=1) como por los botones "Rellenar hasta N" (pedido el 27/8/2026, para
@@ -4503,7 +4546,7 @@
       newOnes.push({ id: ryderNewId(), a: teamSize===2 ? [null,null] : null, b: teamSize===2 ? [null,null] : null });
     }
     var patch = {}; patch['pairings.'+key] = (rd.pairings[key]||[]).concat(newOnes);
-    return StoreOps.setRyder(patch).then(render);
+    return setRyderNow(patch);
   }
   Object.keys(RYDER_FORMATS).forEach(function(key){
     $('#rdAddPair'+cap1(key)).addEventListener('click', function(){ ryderAddPairs(key, 1); });
