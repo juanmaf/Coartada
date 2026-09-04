@@ -1064,7 +1064,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.23";
+  var APP_VERSION = "2026-08-28.24";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -4266,19 +4266,26 @@
       }).join(', ') + '</p>';
     }
     wrap.innerHTML = html;
+    // Estos tres botones (Quitar de invitados, Quitar automático/"de Equipos", Readmitir) viven
+    // dentro de esta misma lista que se acaba de repintar entera, y se vuelve a repintar entera
+    // otra vez con cada uno de ellos — el mismo caso que las tarjetas de parejas/resultados
+    // (ver el comentario de `setRyderSoon`), así que usan la variante que espera un tick antes
+    // de pintar, para no arriesgarse a tocar el propio botón mientras su clic todavía se está
+    // procesando. Reportado el 31/8/2026: "le he ido a quitar [uno]... se han eliminado todos
+    // menos 1" — un roster que se queda reduciéndose de golpe encaja justo con ese mismo riesgo.
     $all('[data-ryder-del-roster]', wrap).forEach(function(btn){
       var rid = btn.getAttribute('data-ryder-del-roster');
       bindConfirmDelete(btn, function(){
         var rd2 = ryder();
         var newRoster = rd2.roster.filter(function(x){ return x.id!==rid; });
-        setRyderNow({ roster: newRoster, pairings: ryderStripFromPairings(rd2.pairings, rid) });
+        setRyderSoon({ roster: newRoster, pairings: ryderStripFromPairings(rd2.pairings, rid) });
       }, { timeoutMs: 3000 });
     });
     $all('[data-ryder-exclude]', wrap).forEach(function(btn){
       var pid = btn.getAttribute('data-ryder-exclude');
       bindConfirmDelete(btn, function(){
         var rd2 = ryder();
-        setRyderNow({
+        setRyderSoon({
           excludedPlayerIds: rd2.excludedPlayerIds.concat([pid]),
           pairings: ryderStripFromPairings(rd2.pairings, 'auto_'+pid)
         });
@@ -4288,7 +4295,7 @@
       btn.addEventListener('click', function(){
         var pid = btn.getAttribute('data-ryder-readmit');
         var rd2 = ryder();
-        setRyderNow({ excludedPlayerIds: rd2.excludedPlayerIds.filter(function(x){ return x!==pid; }) });
+        setRyderSoon({ excludedPlayerIds: rd2.excludedPlayerIds.filter(function(x){ return x!==pid; }) });
       });
     });
   }
