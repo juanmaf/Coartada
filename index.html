@@ -907,7 +907,7 @@
           </div>
 
           <div class="card">
-            <div class="section-head"><div><h2>Jugadores</h2><p>Añade a cada equipo jugadores que ya están en la app (su hándicap sube solo del ranking) o invitados sueltos que no la usan (con hándicap a mano).</p></div></div>
+            <div class="section-head"><div><h2>Jugadores</h2><p>Cada equipo se rellena solo con quien ya tiene ese equipo en Equipos. Usa esto solo para jugadores de la app SIN equipo asignado, o invitados sueltos que no usan la app (con hándicap a mano). Para quitar o recuperar a alguien que sí tiene equipo, usa "Quitar"/"Readmitir" en su lista de abajo.</p></div></div>
             <div class="grid2">
               <div class="stack">
                 <h3 style="font-size:15px;" id="ryderTeamLabelA">Equipo A</h3>
@@ -1064,7 +1064,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.24";
+  var APP_VERSION = "2026-08-28.25";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -4231,9 +4231,18 @@
       }).join('');
     });
   }
+  // Reportado el 8/9/2026: tras excluir a Carlos García de Pichones con "Quitar", este mismo
+  // desplegable empezó a ofrecerlo como ÚNICA opción para "añadir" — justo lo contrario de lo
+  // que se quería. Pasaba porque antes se calculaba `used` a partir de quién está ACTIVO ahora
+  // mismo en algún equipo (ryderAllMembers ya filtra a los excluidos), así que un jugador recién
+  // excluido dejaba de contar como "puesto" y reaparecía aquí como si fuera nuevo por fichar —
+  // y si se le daba a "Añadir", se colaba de vuelta por un alta manual sin quitarle realmente la
+  // exclusión. Este desplegable es solo para jugadores SIN equipo en Equipos (fichajes sueltos o
+  // invitados de la app) — quien tiene equipo pero se excluyó de esta Ryder concreta vuelve por
+  // "Readmitir" en la lista de excluidos, no por aquí.
   function renderRyderAddPlayerSelect(team, rd){
-    var used = ryderAllMembers(rd).filter(function(e){ return e.source==='player'; }).map(function(e){ return e.playerId; });
-    var avail = players().filter(function(p){ return used.indexOf(p.id)===-1; }).sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
+    var manualUsed = rd.roster.filter(function(e){ return e.source==='player'; }).map(function(e){ return e.playerId; });
+    var avail = players().filter(function(p){ return !p.team && manualUsed.indexOf(p.id)===-1; }).sort(function(a,b){ return a.name.localeCompare(b.name,'es'); });
     var sel = $('#ryderAddPlayer'+team.toUpperCase());
     var keep = sel.value;
     sel.innerHTML = '<option value="">Elige jugador de la app…</option>' + avail.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');

@@ -65,6 +65,107 @@ Con esto, tu base de datos ya existe y sabe aceptar conexiones desde tu web.
    Ese es el enlace definitivo para compartir con todo el grupo. Funciona en
    cualquier navegador, móvil o cuenta — no depende de Claude.
 
+## Parte 3 — "Cargar rondas desde una captura" (opcional, 27/8/2026)
+
+Esta parte es **opcional y aparte de todo lo anterior**: si no la haces, el resto de
+la app funciona exactamente igual. Es solo para activar la tarjeta "Cargar rondas
+desde una captura" en la pestaña Rondas (subir una foto del marcador de una partida y
+que la app proponga las rondas de cada jugador para que las apruebes). Es la única
+parte de todo el proyecto que necesita algo más que Firebase + GitHub Pages, porque
+leer una foto con IA necesita una pieza de servidor — mientras no hagas esta parte,
+esa tarjeta se queda oculta sola y no rompe nada más.
+
+1. **Pasar tu proyecto Firebase al plan Blaze** (pago por uso — sigue siendo gratis
+   en la práctica para un grupo de amigos: Google da 2 millones de llamadas gratis al
+   mes a las Cloud Functions, y por este uso no deberíais acercaros ni de lejos).
+   Firebase Console → icono de la rueda dentada → "Uso y facturación" → "Modificar
+   plan" → Blaze. Pide una tarjeta de pago, pero solo se cobra si de verdad se supera
+   la capa gratuita.
+2. **Activar la API de Vertex AI** en Google Cloud Console (el mismo proyecto que tu
+   Firebase). Ojo: Google renombró este producto a mitad de 2026 — en el buscador de
+   arriba de la consola ya no aparece como "Vertex AI", sino como **"Agent Platform
+   API"** (o, si buscas por el nombre del servicio, `aiplatform`). Es la misma API de
+   siempre por debajo, solo cambió el nombre visible. Búscala y pulsa "Habilitar".
+3. **Instalar Node.js** (si no lo tienes) y luego **Firebase CLI**:
+   ```
+   npm install -g firebase-tools
+   firebase login
+   ```
+   En Windows, si `npm` da un error de que la ejecución de scripts está deshabilitada,
+   abre PowerShell como tú (no hace falta administrador) y ejecuta una vez:
+   `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` — es el ajuste normal y seguro
+   para poder usar herramientas de desarrollo, luego `npm` funciona sin más.
+4. **Instalar las dependencias de la función** — antes de desplegar, entra en la
+   carpeta `functions/` y ejecuta una vez:
+   ```
+   cd functions
+   npm install
+   cd ..
+   ```
+5. **Desplegar la función**: desde la carpeta donde tienes estos ficheros (con la
+   carpeta `functions/` y el fichero `firebase.json` dentro — ambos ya vienen
+   incluidos, `firebase.json` es lo que le dice a este comando dónde está la función),
+   ```
+   firebase use --add        (elige tu proyecto, p. ej. coartadagolf)
+   firebase deploy --only functions
+   ```
+   La primera vez, el propio comando te puede pedir permiso para activar algunas APIs
+   adicionales (Cloud Build, Artifact Registry, Eventarc) — acepta, son necesarias
+   para poder desplegar cualquier función y no tienen coste por sí solas.
+6. **Dar permiso a la función para usar Vertex AI**: Google Cloud Console → "IAM y
+   administración" → "IAM". Busca en la lista la cuenta de servicio que termina en
+   `@PROYECTO.iam.gserviceaccount.com` o `-compute@developer.gserviceaccount.com`
+   (es la identidad con la que corre la función) → lápiz de editar → "Añadir otro rol"
+   → busca `aiplatform.user` y elige **"Usuario de Agent Platform"** (mismo rol de
+   siempre, "Vertex AI User", con el nombre visible actualizado) → Guardar.
+7. **Activar App Check** (la protección para que solo tu propia web pueda llamar a la
+   función, no cualquier bot): Firebase Console → "compilación" → "App Check" →
+   registra tu app web. Desde agosto de 2026 Firebase solo ofrece **reCAPTCHA
+   Enterprise** como proveedor (ya no aparece la v3 clásica) — la clave se crea aparte,
+   en Google Cloud Console → "Seguridad" → "reCAPTCHA Enterprise" → "Crear clave",
+   tipo **"Sitio web" · Score** (es el equivalente a la v3 de siempre), con el dominio
+   de GitHub Pages (`TU-USUARIO.github.io`) en la lista de dominios permitidos. Esa
+   pantalla te da un **ID de clave** (site key), un valor público que empieza distinto
+   cada vez — vuelve a Firebase App Check y termina el registro con esa clave.
+8. **Pegar esa clave** en `firebase-config.js`, sustituyendo
+   `"PON_AQUI_TU_CLAVE_DE_RECAPTCHA_V3"` por el valor real (cópiala siempre directamente
+   de la consola de Google, nunca de un texto pegado en otro sitio — un solo carácter
+   mal copiado, p. ej. una "S" en vez de un "5", hace que la función falle con un error
+   de "API key not valid" que cuesta de detectar a simple vista). Vuelve a subir el
+   fichero a GitHub. Si lo subes reemplazando el fichero descargado del chat, comprueba
+   que el nombre siga siendo exactamente `firebase-config.js` con guion — algunos
+   navegadores lo guardan sin el guion al descargarlo, y entonces GitHub acaba creando
+   un fichero nuevo (`firebaseconfig.js`) en vez de sustituir el que la web carga de
+   verdad; si pasa eso, edita el fichero correcto directamente con el lápiz de GitHub
+   en vez de volver a subirlo.
+9. **Poner un tope de gasto real** (no solo una alerta), por tranquilidad (dos
+   minutos, gratis): Google Cloud Console → "Facturación" → "Presupuestos y alertas"
+   → "Crear presupuesto" → elige como ámbito tu proyecto + el servicio "Gemini
+   API"/"Vertex AI" → periodo "Mensual" → pon un importe pequeño (por ejemplo 1€) →
+   activa el interruptor de **"Tope de gasto" (spend cap)**, no solo la alerta.
+   Repite el mismo proceso eligiendo el servicio "Cloud Run functions". A diferencia
+   de una alerta normal (que solo avisa), esto bloquea de verdad cualquier uso nuevo
+   de ese servicio en cuanto se llega al importe, hasta que tú mismo lo reactives a
+   mano desde la consola — el margen de retraso en detectarlo es mínimo, y con el
+   coste real de esto (fracciones de céntimo por captura) nunca vais a acercaros ni
+   de lejos a 1€ en un mes normal.
+10. **Probar**: abre la web, identifícate, ve a la pestaña Rondas — debería aparecer ya
+    la tarjeta "Cargar rondas desde una captura". Súbele una foto del marcador de una
+    partida: primero te pregunta, de forma simple, si el campo, la barra y la fecha
+    detectados son correctos (los puedes corregir ahí mismo); solo después de confirmar
+    eso aparece la lista de jugadores, ya en formato compacto (una fila por jugador, con
+    un icono ⚠️ si hay posible duplicado y un botón ✓ para aprobar cada uno). Cada fila
+    intenta emparejar el nombre detectado con alguien ya registrado (tolera tildes y
+    apellidos incompletos, p. ej. "Mario Bedialauneta" reconoce a "Mario Bedia" ya
+    existente); si no reconoce a nadie parecido, marca sola el icono 🆕 de "jugador
+    nuevo" con el nombre precargado — revisa cada fila antes de aprobarla y, si el
+    emparejamiento se equivoca, puedes marcar o desmarcar ese icono a mano.
+
+Nada de esto necesita tocar `firestore.rules` otra vez — la función nueva no lee ni
+escribe en las colecciones de siempre (`players`, `rounds`, etc.), solo en una
+colección propia de contador (`_screenshotImportUsage`) que ya queda bloqueada para
+cualquiera que no sea la propia función, por las mismas reglas que ya tienes.
+
 ## El icono al añadir la web a la pantalla de inicio del móvil
 
 Desde el 26/8/2026, la página lleva su propio icono (una bandera de golf sobre fondo verde,
