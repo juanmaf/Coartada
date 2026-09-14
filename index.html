@@ -245,6 +245,12 @@
     position:fixed; inset:0; background:rgba(10,14,10,.5); display:flex; align-items:center; justify-content:center;
     padding:20px; z-index:50;
   }
+  /* La puerta de acceso con Google (14/9/2026) tiene que quedar SIEMPRE por encima de cualquier
+     otro modal (p.ej. "¿Quién eres?", que puede intentar abrirse solo si de fondo ya hay datos
+     cargados) — si empataran a z-index, gana el que esté más abajo en el HTML, y "¿Quién eres?"
+     va después en el documento, tapando la puerta de acceso. Con esto no depende de vigilar cada
+     sitio del código que pueda abrir un modal mientras no haya sesión: gana siempre por z-index. */
+  #authLoading, #authGate{ z-index:9999; }
   .modal{ background:var(--plane); border-radius:16px; padding:24px; max-width:440px; width:100%; box-shadow:var(--shadow); max-height:86vh; overflow:auto;}
   .modal h2{ font-size:19px; margin-bottom:4px; }
   .modal p.lead{ color:var(--muted); font-size:13.5px; margin:0 0 16px; }
@@ -339,6 +345,30 @@
 </style>
 </head>
 <body>
+
+<!-- Puerta de acceso con Google (14/9/2026, tras el incidente de rondas duplicadas por escrituras
+     masivas directas a la base de datos abierta): antes, cualquiera con la URL podía leer y
+     escribir sin más — "de honor", pensado para un grupo cerrado de amigos, pero eso también deja
+     la puerta abierta a scripts/bots que encuentren el proyecto. Ahora hace falta haber iniciado
+     sesión con una cuenta de Google (real, aunque anónima para el resto del grupo — no hace falta
+     usar tu nombre real dentro de la app, solo demuestra que hay una persona detrás) antes de que
+     Firestore deje leer o escribir nada (ver firestore.rules: `request.auth != null`). Esta capa
+     se queda oculta mientras se comprueba si ya había una sesión guardada (evita el parpadeo de
+     enseñar el botón un instante para luego ocultarlo); en cuanto se sabe, se muestra la de abajo
+     solo si de verdad no hay sesión.-->
+<div class="modal-backdrop" id="authLoading">
+  <div class="modal" style="text-align:center;">
+    <p class="lead">Comprobando sesión…</p>
+  </div>
+</div>
+<div class="modal-backdrop" id="authGate" hidden>
+  <div class="modal" style="text-align:center;">
+    <h2>Liga de Hándicap</h2>
+    <p class="lead">Para entrar, inicia sesión con Google — es solo para comprobar que hay una persona real detrás, no hace falta que dentro de la app uses tu nombre de Google.</p>
+    <button type="button" class="btn primary" id="googleSignInBtn">Iniciar sesión con Google</button>
+    <p class="hint" id="authGateError" hidden style="color:var(--critical);"></p>
+  </div>
+</div>
 
 <div class="app-shell">
 
@@ -490,6 +520,10 @@
                    28/8/2026) — no se repite en cada fila. -->
               <p class="hint" style="margin:2px 0 6px;">⚠️ posible ronda duplicada · 🆕 marcar si es jugador nuevo · ✓ aprobar esa fila</p>
               <div id="ssRowsWrap" class="ss-rows"></div>
+              <!-- Resumen claro de cuántas rondas de ESTA captura se han guardado ya (pedido el
+                   14/9/2026) — va sumando según se aprueba cada fila, una a una o con "Aprobar
+                   todas", para que quede claro de un vistazo cuánto se ha subido de verdad. -->
+              <p class="pill good" id="ssApprovedSummary" hidden style="display:inline-block;margin-top:8px;"></p>
               <div class="row" style="gap:8px;margin-top:12px;">
                 <button type="button" class="btn primary" id="ssApproveAll">Aprobar todas (menos las que avisen de duplicado)</button>
                 <button type="button" class="btn" id="ssCancel">Cancelar / empezar de nuevo</button>
@@ -546,6 +580,12 @@
               </div>
               <div class="field" id="rf-dup-warning" hidden>
                 <p class="pill warning" style="display:inline-block;">Posible duplicado: ya tienes una ronda igual ese día, en ese campo, con ese mismo resultado. Pulsa "Guardar ronda" otra vez si de verdad quieres guardarla igualmente.</p>
+              </div>
+              <!-- Confirmación clara de que la ronda se ha guardado (pedido el 14/9/2026: un
+                   mensaje igual de claro tras cada alta, sea manual, por captura o por CSV) — se
+                   oculta sola en cuanto se toca el formulario otra vez. -->
+              <div class="field" id="rf-saved-msg" hidden>
+                <p class="pill good" style="display:inline-block;" id="rf-saved-msg-text"></p>
               </div>
               <button class="btn primary" type="submit" style="width:100%;">Guardar ronda</button>
             </form>
@@ -796,6 +836,18 @@
               <tbody></tbody>
             </table></div>
           </div>
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Auditoría de duplicados</h2><p>Agrupa rondas del mismo jugador, mismo campo y mismo día. Dentro de cada grupo, las que además tienen el mismo resultado exacto se marcan solas como "copia idéntica" (esas sí son, seguro, la misma ronda metida de más); las que solo coinciden en la fecha pero con un resultado distinto se muestran igual, pero nunca se premarcan — pueden ser rondas reales distintas. Revisa antes de borrar.</p></div>
+            </div>
+            <div id="dupRoundsSummary" style="margin-bottom:10px;"></div>
+            <div class="table-wrap"><table class="data" id="dupRoundsTable">
+              <thead><tr><th></th><th>Fecha</th><th>Jugador</th><th>Campo</th><th>Modo</th><th>Resultado</th><th>Estado</th><th class="num">Diferencial</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+            <div id="dupRoundsActions" style="margin-top:10px;"></div>
+          </div>
+
           <div class="row">
             <div class="card" style="flex:1 1 260px;">
               <h2 style="font-size:16px;margin-bottom:10px;">Ajustes</h2>
@@ -1015,10 +1067,34 @@
   import {
     getFirestore, collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, writeBatch
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+  import {
+    getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
   // ---------- Firebase ----------
   var app = initializeApp(window.HCP_FIREBASE_CONFIG);
   var db = getFirestore(app);
+
+  // ---------- Puerta de acceso con Google (14/9/2026) ----------
+  // Incidente del 14/9/2026: aparecieron ~2.800 rondas duplicadas de golpe, con un pico de casi
+  // 400.000 lecturas en un día (cuota gratis: 50.000) y hasta 9 conexiones simultáneas — muy por
+  // encima de lo que un grupo de amigos genera a mano. Con la base "de honor" (sin login, rondas
+  // ya validado por firestore.rules pero abierta a cualquiera con la URL) no hay forma de parar
+  // algo así: un script que encuentre el proyecto puede leer y escribir igual que la propia app.
+  // Exigir haber iniciado sesión con Google (real, aunque anónima de cara al resto del grupo: no
+  // hace falta usar tu nombre de Google dentro de la app, solo demuestra que hay una persona
+  // detrás) no cambia nada del "quién eres" que ya elige cada uno más abajo — solo añade una
+  // comprobación previa que un script no puede fingir sin más. firestore.rules ahora exige
+  // `request.auth != null` en todas las colecciones para poder leer o escribir.
+  var auth = getAuth(app);
+  var googleProvider = new GoogleAuthProvider();
+  var authUser = null;
+  function signOutOfGoogle(){
+    signOut(auth);
+  }
+  // El resto de este bloque (todo lo que toca el DOM con `$`, que todavía no existe aquí — se
+  // define más abajo en "helpers") se engancha junto a myId()/renderWhoAmI()/openOnboard(), ver
+  // más abajo: renderAuthGate(), el propio onAuthStateChanged(...) y el listener del botón.
 
   // ---------- "Cargar rondas desde una captura" (27/8/2026) ----------
   // Única función de backend de todo el proyecto (ver functions/index.js) — protegida con
@@ -1064,7 +1140,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.25";
+  var APP_VERSION = "2026-08-28.29";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1080,45 +1156,57 @@
     }
     if(onStoreChange) onStoreChange();
   }
-  onSnapshot(collection(db,'players'), function(snap){
-    Store.players = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
-    ready.players = true; maybeSeedThenFire();
-  }, function(err){ showConnError(err); });
-  onSnapshot(collection(db,'teams'), function(snap){
-    Store.teams = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
-    ready.teams = true; maybeSeedThenFire();
-  }, function(err){ showConnError(err); });
-  onSnapshot(collection(db,'tees'), function(snap){
-    Store.tees = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
-    ready.tees = true; maybeSeedThenFire();
-  }, function(err){ showConnError(err); });
-  onSnapshot(collection(db,'rounds'), function(snap){
-    Store.rounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
-    ready.rounds = true; maybeSeedThenFire();
-  }, function(err){ showConnError(err); });
-  onSnapshot(doc(db,'config','main'), function(d){
-    Store.config = d.exists() ? d.data() : { pin: '2026', autoApprove: false };
-    ready.config = true; maybeSeedThenFire();
-  }, function(err){ showConnError(err); });
-  // Papelera de rondas borradas: colección aparte, de solo consulta para el admin — no forma
-  // parte de la comprobación de "base de datos vacía" ni bloquea el primer render.
-  onSnapshot(collection(db,'deletedRounds'), function(snap){
-    Store.deletedRounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
-    if(onStoreChange) onStoreChange();
-  }, function(err){ showConnError(err); });
-  // Caché compartida de geocodificación por campo (para el clima del día jugado, ver más
-  // abajo): tampoco bloquea el primer render ni la detección de "base de datos vacía" — es
-  // pura ayuda de rendimiento (evita pedir la misma geocodificación desde cada dispositivo).
-  onSnapshot(collection(db,'courseGeo'), function(snap){
-    Store.courseGeo = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
-  }, function(err){ showConnError(err); });
-  // Preparación de la Ryder Pucela Cup (pestaña "Ryder", solo visible con el PIN de admin):
-  // un único documento con la config del evento en curso — no forma parte del arranque de
-  // la app ni de la comprobación de "base de datos vacía", como deletedRounds/courseGeo.
-  onSnapshot(doc(db,'ryder','main'), function(d){
-    Store.ryder = d.exists() ? d.data() : null;
-    if(onStoreChange) onStoreChange();
-  }, function(err){ showConnError(err); });
+  // Los "listeners" de Firestore (onSnapshot) NO se enganchan aquí directamente, sino dentro de
+  // startListening() más abajo — y esa función solo se llama una vez, cuando onAuthStateChanged
+  // confirma que hay sesión de Google. Motivo (14/9/2026): firestore.rules ahora exige sesión
+  // para leer cualquier colección; si se enganchara el listener ANTES de tener sesión, Firestore
+  // respondería con "permission-denied" y ese mismo listener queda cerrado para siempre por el
+  // propio SDK — iniciar sesión después YA NO lo reactivaría solo, dejando la app colgada con el
+  // aviso de "No se puede conectar" aunque el login se hiciera bien a continuación.
+  var listeningStarted = false;
+  function startListening(){
+    if(listeningStarted) return;
+    listeningStarted = true;
+    onSnapshot(collection(db,'players'), function(snap){
+      Store.players = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      ready.players = true; maybeSeedThenFire();
+    }, function(err){ showConnError(err); });
+    onSnapshot(collection(db,'teams'), function(snap){
+      Store.teams = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      ready.teams = true; maybeSeedThenFire();
+    }, function(err){ showConnError(err); });
+    onSnapshot(collection(db,'tees'), function(snap){
+      Store.tees = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      ready.tees = true; maybeSeedThenFire();
+    }, function(err){ showConnError(err); });
+    onSnapshot(collection(db,'rounds'), function(snap){
+      Store.rounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      ready.rounds = true; maybeSeedThenFire();
+    }, function(err){ showConnError(err); });
+    onSnapshot(doc(db,'config','main'), function(d){
+      Store.config = d.exists() ? d.data() : { pin: '2026', autoApprove: false };
+      ready.config = true; maybeSeedThenFire();
+    }, function(err){ showConnError(err); });
+    // Papelera de rondas borradas: colección aparte, de solo consulta para el admin — no forma
+    // parte de la comprobación de "base de datos vacía" ni bloquea el primer render.
+    onSnapshot(collection(db,'deletedRounds'), function(snap){
+      Store.deletedRounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      if(onStoreChange) onStoreChange();
+    }, function(err){ showConnError(err); });
+    // Caché compartida de geocodificación por campo (para el clima del día jugado, ver más
+    // abajo): tampoco bloquea el primer render ni la detección de "base de datos vacía" — es
+    // pura ayuda de rendimiento (evita pedir la misma geocodificación desde cada dispositivo).
+    onSnapshot(collection(db,'courseGeo'), function(snap){
+      Store.courseGeo = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+    }, function(err){ showConnError(err); });
+    // Preparación de la Ryder Pucela Cup (pestaña "Ryder", solo visible con el PIN de admin):
+    // un único documento con la config del evento en curso — no forma parte del arranque de
+    // la app ni de la comprobación de "base de datos vacía", como deletedRounds/courseGeo.
+    onSnapshot(doc(db,'ryder','main'), function(d){
+      Store.ryder = d.exists() ? d.data() : null;
+      if(onStoreChange) onStoreChange();
+    }, function(err){ showConnError(err); });
+  }
 
   function showConnError(err){
     var b = document.getElementById('syncBanner');
@@ -1744,6 +1832,30 @@
     return out;
   }
 
+  // ---------- puerta de acceso con Google: parte que toca el DOM (necesita `$`, definido arriba
+  // en "helpers" — por eso este trozo vive aquí y no junto al resto de la inicialización de
+  // Firebase Auth, más arriba, donde `$` todavía no existía) ----------
+  function renderAuthGate(){
+    $('#authLoading').hidden = true;
+    $('#authGate').hidden = !!authUser;
+  }
+  onAuthStateChanged(auth, function(user){
+    authUser = user;
+    renderAuthGate();
+    // Solo se empieza a escuchar Firestore una vez hay sesión de verdad — ver el porqué junto a
+    // startListening(), más arriba (si no, un "permission-denied" por no tener sesión aún deja
+    // el listener cerrado para siempre, y luego iniciar sesión no lo arreglaría solo).
+    if(user) startListening();
+  });
+  $('#googleSignInBtn').addEventListener('click', function(){
+    var errEl = $('#authGateError');
+    errEl.hidden = true;
+    signInWithPopup(auth, googleProvider).catch(function(err){
+      errEl.textContent = 'No se ha podido iniciar sesión (' + (err && err.code ? err.code : (err && err.message) || err) + '). Inténtalo de nuevo.';
+      errEl.hidden = false;
+    });
+  });
+
   // ---------- identity ----------
   function myId(){ try{ return localStorage.getItem(LS_KEY); }catch(e){ return null; } }
   function setMyId(id){ try{ localStorage.setItem(LS_KEY, id); }catch(e){} }
@@ -1752,9 +1864,14 @@
     var box = $('#whoamiBox');
     var id = myId();
     var p = players().find(function(x){ return x.id===id; });
-    if(!p){ box.innerHTML=''; return; }
-    box.innerHTML = '<span class="chip">'+esc(p.name)+' <button id="switchIdBtn" type="button">cambiar</button></span>';
-    $('#switchIdBtn').addEventListener('click', function(){ openOnboard(true); });
+    var salir = ' <button id="googleSignOutBtn" type="button" title="Cierra tu sesión de Google en este dispositivo">salir</button>';
+    if(!p){ box.innerHTML = authUser ? '<span class="chip">'+salir+'</span>' : ''; }
+    else {
+      box.innerHTML = '<span class="chip">'+esc(p.name)+' <button id="switchIdBtn" type="button">cambiar</button>'+(authUser?salir:'')+'</span>';
+      $('#switchIdBtn').addEventListener('click', function(){ openOnboard(true); });
+    }
+    var signOutBtn = $('#googleSignOutBtn');
+    if(signOutBtn) signOutBtn.addEventListener('click', signOutOfGoogle);
   }
 
   function openOnboard(forceSwitch){
@@ -2205,6 +2322,9 @@
       updateStablefordUI();
       $('#rf-preview').hidden = true;
       $('#rf-dup-warning').hidden = true;
+      $('#rf-saved-msg-text').textContent = '✓ Ronda guardada: ' + courseName + ' (' + teeColor + ') · ' +
+        fmtDateShort(date, true) + ' · ' + pts + ' pts' + (status==='pendiente' ? ' (pendiente de aprobación).' : '.');
+      $('#rf-saved-msg').hidden = false;
       roundFormDupConfirmed = false;
       formDirty = false;
       render();
@@ -2305,6 +2425,13 @@
   var ssRowIdSeq = 1;
   var ssData = null; // { rows: [{id, nombreDetectado, playerId, hcp, resultado, approved}] }
   var ssCourseCombo = null;
+  var ssApprovedCount = 0;
+  function updateSsApprovedSummary(){
+    var el = $('#ssApprovedSummary');
+    if(ssApprovedCount<=0){ el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = '✓ ' + ssApprovedCount + (ssApprovedCount===1 ? ' ronda guardada de esta captura.' : ' rondas guardadas de esta captura.');
+  }
 
   function populateSsTeeSelect(courseName){
     var sel = $('#ssTeeSelect');
@@ -2429,6 +2556,8 @@
         differential: diff, status: status, mode: 'sf'
       });
     }).then(function(ref){
+      ssApprovedCount++;
+      updateSsApprovedSummary();
       render();
       applyUpdateNowIfSafe();
       queueWeatherFor(ref.id, courseName, dateVal);
@@ -2538,6 +2667,8 @@
 
     function resetSsToIdle(){
       ssData = null;
+      ssApprovedCount = 0;
+      updateSsApprovedSummary();
       $('#ssFileInput').value = '';
       $('#ssParseBtn').disabled = true;
       $('#ssReview').hidden = true;
@@ -2713,7 +2844,11 @@
     if(suspicious.length){
       summary += ' ⚠ ' + suspicious.length + ' ronda(s) con un diferencial muy fuera de lo normal — revísalas abajo.';
     }
-    statusEl.textContent = summary;
+    // Mensaje claro y visible del resultado (pedido el 14/9/2026): verde si se ha importado
+    // algo, ámbar si no se ha importado nada (todo eran duplicados) — mismo criterio visual que
+    // el resto de avisos de la app ("pill good"/"pill warning").
+    var summaryCls = roundsToInsert.length>0 ? 'good' : 'warning';
+    statusEl.innerHTML = '<span class="pill ' + summaryCls + '" style="display:inline-block;white-space:normal;">' + esc(summary) + '</span>';
     $('#importCsv').value = '';
     renderImportSuspiciousReview(suspicious, importedForName);
     render();
@@ -3877,7 +4012,116 @@
     });
 
     renderSuspiciousRounds();
+    renderDuplicateRounds();
     renderTrash();
+  }
+
+  // ---------- Auditoría de duplicados: rondas repetidas del mismo jugador+campo+día ----------
+  // Pedido el 14/9/2026 tras un aviso grave: "han aparecido 1.000-2.000 rondas repetidas...
+  // tiene pinta o de error de BBDD o de hackeo". El aviso de "posible ronda duplicada" al meter
+  // una ronda (findPossibleDuplicateRound/findPossibleDuplicateRawRound, más arriba) solo compara
+  // DENTRO del mismo modo — una ronda 'sf' nunca se compara con una 'raw' — así que una recarga
+  // completa de una temporada por una vía distinta a como se metió la primera vez pasaría
+  // desapercibida para ese aviso. Y como esta base de datos es "de honor" (sin login — ver
+  // firestore.rules), tampoco se puede descartar en principio que alguien, o algún script/escáner
+  // automático que encontrara la URL, haya escrito rondas directamente sin pasar por la app (ahí
+  // ese aviso ni siquiera llega a ejecutarse, porque vive en el JS del navegador, no en el
+  // servidor). Auditando los datos reales de producción el 14/9/2026 se descartó esa hipótesis:
+  // todas las rondas "de más" referencian jugadores reales ya existentes (ninguna con un id
+  // inventado) y valores de golf plausibles — nada de basura de un bot — y casi todas (mode:'raw')
+  // vienen de reimportar el mismo CSV de "Handicap Tracker" varias veces (probablemente porque el
+  // botón no daba una confirmación clara de que ya se había importado y alguien insistió, o porque
+  // se volvió a pegar un histórico ya cargado antes). El propio aviso de duplicado del import de
+  // CSV (findPossibleDuplicateRawRound) debería haberlo evitado, pero solo compara contra lo que
+  // el navegador ya tiene sincronizado en local en ese instante — si dos importaciones se dispararon
+  // seguidas (dos clics, o reabrir la página antes de que la anterior terminara de sincronizar),
+  // la segunda no veía todavía las filas que la primera acababa de escribir.
+  //
+  // Esta auditoría agrupa TODAS las rondas —cualquier modo, cualquier estado— que compartan
+  // jugador+campo+fecha, para que el admin vea el alcance real. Pero OJO: los mismos datos reales
+  // enseñaron que compartir fecha no basta para ser la misma ronda repetida — hay jugadores con
+  // varias rondas antiguas distintas (resultados distintos) todas fechadas el mismo día, con toda
+  // pinta de ser un defecto de la app de origen (Handicap Tracker) al exportar histórico antiguo,
+  // no de esta app. Por eso, dentro de cada grupo por fecha, solo se pre-marca para borrar una
+  // fila cuando ADEMÁS coincide exactamente en modo y resultado (score en CSV, Stableford en
+  // manual/captura) con otra ya vista en el mismo grupo — esas sí son, con toda seguridad, la
+  // misma ronda metida de más. Las que solo comparten fecha pero tienen un resultado distinto se
+  // muestran igual (para que se vean juntas y se pueda revisar a ojo), pero nunca se pre-marcan.
+  function computeDuplicateRoundGroups(){
+    var byKey = {};
+    rounds().forEach(function(r){
+      var key = r.player + '|' + r.course + '|' + r.date;
+      (byKey[key] = byKey[key] || []).push(r);
+    });
+    return Object.keys(byKey).map(function(k){ return byKey[k]; })
+      .filter(function(g){ return g.length >= 2; })
+      .sort(function(a,b){ return cmpDateDesc(a[0], b[0]); });
+  }
+  // Dos rondas son "la misma copia" si, dentro de ya compartir jugador+campo+fecha, además
+  // comparten modo y resultado exacto — nunca comparando un score bruto (CSV) contra un
+  // resultado Stableford (manual/captura), y nunca dos resultados distintos entre sí.
+  function exactDupValueKey(r){
+    return r.mode + '|' + (r.mode==='raw' ? r.score : r.stableford);
+  }
+  function renderDuplicateRounds(){
+    var table = $('#dupRoundsTable'); if(!table) return;
+    var tbody = table.querySelector('tbody');
+    var summary = $('#dupRoundsSummary');
+    var actions = $('#dupRoundsActions');
+    var groups = computeDuplicateRoundGroups();
+    var totalInGroups = groups.reduce(function(n,g){ return n+g.length; }, 0);
+    var totalExactExtra = groups.reduce(function(n,g){
+      var seen = {};
+      g.forEach(function(r){ var k = exactDupValueKey(r); if(seen[k]) n++; seen[k]=true; });
+      return n;
+    }, 0);
+    if(groups.length===0){
+      summary.innerHTML = '<p class="hint">Ninguna ronda repetida detectada ahora mismo (mismo jugador + campo + fecha), de un total de ' + rounds().length + ' rondas.</p>';
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">Nada que revisar.</td></tr>';
+      actions.innerHTML = '';
+      return;
+    }
+    summary.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">' + totalInGroups + ' ronda(s) comparten jugador+campo+fecha en ' + groups.length + ' grupo(s) (de un total de ' + rounds().length + ' rondas) — de esas, ' + totalExactExtra + ' son copias EXACTAS de más (mismo modo y resultado) y ya salen premarcadas abajo. El resto del grupo solo coincide en la fecha: revísalas antes de tocarlas, pueden ser rondas reales distintas.</p>';
+    var rowsHtml = '';
+    groups.forEach(function(g){
+      rowsHtml += '<tr class="dup-group-head"><td colspan="9" style="background:rgba(255,255,255,.04);"><strong>'+esc(pname(g[0].player))+'</strong> · '+esc(g[0].course)+' · '+esc(g[0].date)+' — '+g.length+' rondas</td></tr>';
+      var seenExact = {};
+      g.forEach(function(r){
+        var ek = exactDupValueKey(r);
+        var isExactExtra = !!seenExact[ek];
+        seenExact[ek] = true;
+        var resultado = r.mode==='raw' ? ('Score '+(typeof r.score==='number'?r.score:'—')) : (typeof r.stableford==='number' ? (r.stableford+' pts') : '—');
+        if(isExactExtra) resultado += ' <span class="pill warning">copia idéntica</span>';
+        rowsHtml += '<tr>' +
+          '<td><input type="checkbox" class="dup-check" data-dup-id="'+esc(r.id)+'" '+(isExactExtra?'checked':'')+'></td>' +
+          '<td>'+esc(r.date)+'</td>' +
+          '<td>'+esc(pname(r.player))+'</td>' +
+          '<td>'+esc(r.course)+' ('+esc(r.tee)+')</td>' +
+          '<td>'+(r.mode==='raw'?'CSV':'Manual/captura')+'</td>' +
+          '<td>'+resultado+'</td>' +
+          '<td>'+esc(r.status)+'</td>' +
+          '<td class="num">'+(typeof r.differential==='number'?r.differential.toFixed(1):'—')+'</td>' +
+          '<td><button type="button" class="btn small danger" data-dup-del="'+esc(r.id)+'">Borrar</button></td>' +
+        '</tr>';
+      });
+    });
+    tbody.innerHTML = rowsHtml;
+
+    $all('[data-dup-del]', tbody).forEach(function(btn){
+      var rid = btn.getAttribute('data-dup-del');
+      bindConfirmDelete(btn, function(){
+        var round = rounds().find(function(x){ return x.id === rid; });
+        if(!round){ render(); return; }
+        deleteRoundWithLog(round, 'duplicado (auditoría)').then(render);
+      }, { timeoutMs: 3000 });
+    });
+
+    actions.innerHTML = '<button type="button" class="btn danger" id="dupDeleteSelectedBtn">Borrar las marcadas</button> <span class="hint">Por defecto solo se marcan las "copia idéntica" (mismo modo y resultado repetido) — revisa igualmente antes de confirmar.</span>';
+    bindConfirmDelete($('#dupDeleteSelectedBtn'), function(){
+      var ids = $all('.dup-check', tbody).filter(function(cb){ return cb.checked; }).map(function(cb){ return cb.getAttribute('data-dup-id'); });
+      var toDelete = ids.map(function(id){ return rounds().find(function(x){ return x.id===id; }); }).filter(Boolean);
+      Promise.all(toDelete.map(function(r){ return deleteRoundWithLog(r, 'duplicado (auditoría, borrado en lote)'); })).then(render);
+    }, { timeoutMs: 4000, label: 'Borrar las marcadas' });
   }
 
   // ---------- Rondas sospechosas: indicador persistente para el admin (no solo tras importar) ----------
@@ -4596,8 +4840,8 @@
   // ocurre si no hay nada sin guardar; si lo hay, se espera a que se envíe la ronda (o se
   // avisa con un banner y un botón para recargar cuando la persona quiera).
   var formDirty = false, updateAvailable = false;
-  $('#roundForm').addEventListener('input', function(){ formDirty = true; roundFormDupConfirmed = false; $('#rf-dup-warning').hidden = true; });
-  $('#roundForm').addEventListener('change', function(){ formDirty = true; roundFormDupConfirmed = false; $('#rf-dup-warning').hidden = true; });
+  $('#roundForm').addEventListener('input', function(){ formDirty = true; roundFormDupConfirmed = false; $('#rf-dup-warning').hidden = true; $('#rf-saved-msg').hidden = true; });
+  $('#roundForm').addEventListener('change', function(){ formDirty = true; roundFormDupConfirmed = false; $('#rf-dup-warning').hidden = true; $('#rf-saved-msg').hidden = true; });
 
   function applyUpdateNowIfSafe(){
     if(updateAvailable && !formDirty){ location.reload(); }
@@ -4660,7 +4904,10 @@
   // solo se hace una vez por carga de página (onboardAutoChecked).
   var onboardAutoChecked = false;
   function maybeAutoOnboard(){
-    if(onboardAutoChecked || !allReady()) return;
+    // Tampoco tiene sentido abrir "¿Quién eres?" mientras no haya sesión de Google todavía (la
+    // puerta de acceso, ver más abajo) — además de que la puerta ya se pinta siempre por encima
+    // (ver #authGate en el CSS), esto evita el propio intento mientras se espera el login.
+    if(onboardAutoChecked || !allReady() || !authUser) return;
     onboardAutoChecked = true;
     if(!myId() || !players().some(function(p){return p.id===myId();})){ openOnboard(); }
   }

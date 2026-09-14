@@ -1,0 +1,14 @@
+{
+  "name": "hcp-app-functions",
+  "description": "Cloud Function para 'Cargar rondas desde una captura' (ver SETUP.md, sección Parte 3) — la única pieza de backend de toda la app; el resto sigue siendo un sitio estático + Firestore.",
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "@google/genai": "^1.0.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "private": true
+}

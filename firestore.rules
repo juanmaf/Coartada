@@ -2,26 +2,34 @@ rules_version = '2';
 
 // Reglas de seguridad para la Liga de Hándicap.
 //
-// Sigue sin haber cuentas de usuario ni Firebase Authentication: es una app "de honor"
-// para un grupo cerrado de amigos que comparten el enlace, y el PIN de administrador
-// (visible en el propio documento config/main, legible por cualquiera) no es una
-// autenticación real. Por eso estas reglas siguen permitiendo leer y escribir a
-// cualquiera que tenga la URL de la base de datos — eso no ha cambiado.
+// Hasta el 14/9/2026 no había cuentas de usuario ni Firebase Authentication: era una app
+// "de honor" para un grupo cerrado de amigos que comparten el enlace, y el PIN de
+// administrador (visible en el propio documento config/main, legible por cualquiera) no
+// era una autenticación real. Ese mismo día aparecieron de golpe ~2.800 rondas duplicadas,
+// con un pico de casi 400.000 lecturas en un solo día (cuota gratis: 50.000) y hasta 9
+// conexiones simultáneas — muy por encima de lo que genera a mano un grupo de amigos. Con
+// la base abierta a cualquiera que tuviera la URL, un script encontrado por casualidad (o
+// a propósito) podía leer y escribir exactamente igual que la propia app.
 //
-// Lo que sí hacen ahora es exigir que cada documento escrito tenga exactamente la forma
-// que la app espera (los campos que usa, con los tipos y rangos razonables) y bloquear
-// cualquier colección que la app no use. Esto no detiene a alguien del grupo que decida
-// escribir algo raro a mano, pero sí bloquea la inmensa mayoría de bots/escáneres
-// automáticos que encuentran la URL y prueban a escribir basura, documentos gigantes o
-// colecciones inventadas — que es el riesgo real de tener la base de datos abierta.
+// Por eso ahora TODAS las colecciones exigen además `isSignedIn()` (que haya iniciado
+// sesión con Google desde la app — ver el "Iniciar sesión con Google" en index.html). No
+// hace falta que cada persona use su nombre real de Google dentro de la app (el "¿Quién
+// eres?" de siempre sigue funcionando igual, por encima de esto) — esto es solo una
+// comprobación previa de que hay una persona real detrás, que un script no puede fingir
+// sin más. El PIN de admin sigue siendo el único control de quién puede administrar la
+// liga; esta capa es aparte y cubre a cualquiera que haya entrado en la app, admin o no.
 //
-// Si en el futuro se quiere un control de acceso de verdad, el siguiente paso sería
-// añadir Firebase Authentication (aunque sea "anónima", sin pedir usuario/contraseña) y
-// condicionar estas reglas a request.auth != null, y opcionalmente Firebase App Check
-// para exigir que las peticiones vengan de esta app y no de un script cualquiera.
+// Se mantiene también la validación de forma de cada documento (campos exactos, tipos y
+// rangos razonables) y el bloqueo de cualquier colección que la app no use — eso ya
+// protegía contra bots que escriben basura con una forma cualquiera; ahora, con el login,
+// además hace falta esa cuenta real para siquiera intentarlo.
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
     function isStr(v, maxLen) {
       return v is string && v.size() <= maxLen;
@@ -39,26 +47,29 @@ service cloud.firestore {
 
     // ---------------- players ----------------
     match /players/{id} {
-      allow read: if true;
-      allow delete: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['name', 'team'])
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['name', 'team'])
         && isStr(request.resource.data.name, 80) && request.resource.data.name.size() > 0
         && (!('team' in request.resource.data) || isStr(request.resource.data.team, 80));
     }
 
     // ---------------- teams ----------------
     match /teams/{id} {
-      allow read: if true;
-      allow delete: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['name'])
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['name'])
         && isStr(request.resource.data.name, 80) && request.resource.data.name.size() > 0;
     }
 
     // ---------------- tees (catálogo de campos/barras) ----------------
     match /tees/{id} {
-      allow read: if true;
-      allow delete: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['course', 'color', 'sr', 'cr', 'par', 'hidden'])
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['course', 'color', 'sr', 'cr', 'par', 'hidden'])
         && isStr(request.resource.data.course, 160)
         && isStr(request.resource.data.color, 40)
         && request.resource.data.sr is number && request.resource.data.sr >= 40 && request.resource.data.sr <= 170
@@ -69,9 +80,10 @@ service cloud.firestore {
 
     // ---------------- rounds ----------------
     match /rounds/{id} {
-      allow read: if true;
-      allow delete: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(
           ['player', 'course', 'tee', 'date', 'stableford', 'hcp', 'score', 'cr', 'sr', 'par',
            'differential', 'status', 'mode', 'dismissedSuspicious', 'weather'])
         && isStr(request.resource.data.player, 60)
@@ -95,10 +107,11 @@ service cloud.firestore {
 
     // ---------------- deletedRounds (papelera, registro histórico) ----------------
     match /deletedRounds/{id} {
-      allow read: if true;
-      allow delete: if true;
-      allow update: if true; // la app actual no actualiza entradas de la papelera, solo las crea o borra
-      allow create: if request.resource.data.keys().hasOnly(
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn();
+      allow update: if isSignedIn(); // la app actual no actualiza entradas de la papelera, solo las crea o borra
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly(
           ['roundId', 'player', 'playerName', 'course', 'tee', 'date', 'score', 'hcp', 'stableford',
            'cr', 'sr', 'par', 'differential', 'status', 'mode', 'deletedAt', 'deletedByPlayerId',
            'deletedByPlayerName', 'deletedAsAdmin', 'reason'])
@@ -108,9 +121,10 @@ service cloud.firestore {
 
     // ---------------- courseGeo (caché de geocodificación para el clima del día jugado) ----------------
     match /courseGeo/{id} {
-      allow read: if true;
-      allow delete: if true;
-      allow create, update: if request.resource.data.keys().hasOnly(['course', 'lat', 'lon'])
+      allow read: if isSignedIn();
+      allow delete: if isSignedIn();
+      allow create, update: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['course', 'lat', 'lon'])
         && isStr(request.resource.data.course, 160)
         && request.resource.data.lat is number && request.resource.data.lat >= -90 && request.resource.data.lat <= 90
         && request.resource.data.lon is number && request.resource.data.lon >= -180 && request.resource.data.lon <= 180;
@@ -118,8 +132,9 @@ service cloud.firestore {
 
     // ---------------- config/main ----------------
     match /config/main {
-      allow read: if true;
-      allow write: if request.resource.data.keys().hasOnly(['pin', 'autoApprove'])
+      allow read: if isSignedIn();
+      allow write: if isSignedIn()
+        && request.resource.data.keys().hasOnly(['pin', 'autoApprove'])
         && (!('pin' in request.resource.data) || isStr(request.resource.data.pin, 20))
         && (!('autoApprove' in request.resource.data) || request.resource.data.autoApprove is bool);
     }
@@ -130,9 +145,9 @@ service cloud.firestore {
     // no se valida la forma exacta del documento: es un array de jugadores/invitados y de
     // emparejamientos por formato cuya estructura puede evolucionar sin tener que tocar estas
     // reglas cada vez, y no afecta a la integridad del hándicap del grupo (players/rounds),
-    // que sigue validado arriba. Mismo criterio de "honor system" que el resto de la app.
+    // que sigue validado arriba. Sigue exigiendo sesión con Google, igual que el resto.
     match /ryder/{docId} {
-      allow read, write: if true;
+      allow read, write: if isSignedIn();
     }
 
     // Cualquier otra colección o documento que la app no use: bloqueado.
