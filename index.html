@@ -613,6 +613,7 @@
             <summary style="cursor:pointer;font-weight:600;">Importar historial (CSV de Handicap Tracker)</summary>
             <p style="font-size:13px;color:var(--muted);margin:10px 0;">
               Si vienes de la app Handicap Tracker, exporta tu historial a CSV (columnas: Round Date, Course Name, Course Par, Course Slope, Course Rating, Round Score) y pégalo aquí. Se carga como tuyo, con el score bruto de cada ronda — no hace falta reconstruir Stableford para estas.
+              Si el CSV tiene más de 300 filas, no se carga directamente: queda a la espera de que el administrador la revise y la apruebe desde la pestaña Admin — avísale para que no se quede esperando.
             </p>
             <div class="field" id="importAsField" hidden style="margin:0 0 10px;">
               <label for="importAsPlayer">Importar como (solo admin)</label>
@@ -833,6 +834,20 @@
             </div>
             <div class="table-wrap"><table class="data" id="pendingTable">
               <thead><tr><th>Fecha</th><th>Jugador</th><th>Campo</th><th class="num">Diferencial</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table></div>
+          </div>
+          <!-- Cargas masivas pendientes (14/9/2026): tras el incidente de miles de rondas
+               duplicadas de golpe, cualquier CSV de más de 300 filas subido por alguien SIN el
+               PIN de admin ya no se importa solo — se guarda aquí para que el administrador lo
+               revise y decida. Ver requestBulkImportApproval()/renderPendingImports() más abajo. -->
+          <div class="card">
+            <div class="section-head">
+              <div><h2>Cargas masivas pendientes de aprobación</h2><p>CSV de más de 300 filas subidos por alguien sin el PIN de admin — no se meten solos, hace falta que los revises y apruebes aquí (o que los descartes).</p></div>
+            </div>
+            <div id="pendingImportsSummary" style="margin-bottom:10px;"></div>
+            <div class="table-wrap"><table class="data" id="pendingImportsTable">
+              <thead><tr><th>Quién la subió</th><th class="num">Filas</th><th>Cuándo</th><th></th></tr></thead>
               <tbody></tbody>
             </table></div>
           </div>
@@ -1140,10 +1155,10 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.29";
+  var APP_VERSION = "2026-08-28.30";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
-  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], ryder: null, config: { pin: '2026', autoApprove: false } };
+  var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], pendingImports: [], ryder: null, config: { pin: '2026', autoApprove: false } };
   var onStoreChange = null;
   var ready = { players: false, teams: false, tees: false, rounds: false, config: false };
   function allReady(){ return ready.players && ready.teams && ready.tees && ready.rounds && ready.config; }
@@ -1204,6 +1219,12 @@
     // la app ni de la comprobación de "base de datos vacía", como deletedRounds/courseGeo.
     onSnapshot(doc(db,'ryder','main'), function(d){
       Store.ryder = d.exists() ? d.data() : null;
+      if(onStoreChange) onStoreChange();
+    }, function(err){ showConnError(err); });
+    // Cargas masivas de CSV pendientes de aprobación del admin (14/9/2026, ver
+    // requestBulkImportApproval() más abajo) — tampoco bloquea el arranque de la app.
+    onSnapshot(collection(db,'pendingImports'), function(snap){
+      Store.pendingImports = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
       if(onStoreChange) onStoreChange();
     }, function(err){ showConnError(err); });
   }
@@ -1279,6 +1300,8 @@
     },
     updateTee: function(id, patch){ return updateDoc(doc(db,'tees', id), patch); },
     addCourseGeo: function(data){ return addDoc(collection(db,'courseGeo'), data); },
+    addPendingImport: function(entry){ return addDoc(collection(db,'pendingImports'), entry); },
+    deletePendingImport: function(id){ return deleteDoc(doc(db,'pendingImports', id)); },
     // Reportado el 31/8/2026 con dos síntomas distintos que resultaron ser el mismo fallo: al
     // elegir Equipo A/B "el otro se vacía", y al elegir Campo/Barra del torneo "Par/CR/Slope
     // quedan en blanco". La pestaña Ryder se vuelve a pintar entera con cada cambio de
@@ -2754,18 +2777,20 @@
     else if(myId() && ps.some(function(p){ return p.id===myId(); })) sel.value = myId();
   }
 
-  async function importCsvRows(){
-    var text = $('#importCsv').value;
-    var parsed = parseHandicapTrackerCsv(text);
-    var statusEl = $('#importStatus');
-    // Por defecto cada usuario solo puede importar rondas para sí mismo. Excepción: en modo
-    // admin se puede elegir el jugador destino (útil para pruebas con datos de varios usuarios reales).
-    var pid = (adminUnlocked && $('#importAsPlayer').value) ? $('#importAsPlayer').value : myId();
-    if(!pid || !players().some(function(p){ return p.id===pid; })){ openOnboard(); return; }
-    if(parsed.length===0){ statusEl.textContent = 'No se ha reconocido ninguna fila válida en ese texto.'; return; }
+  // Tras el incidente del 14/9/2026 (miles de rondas duplicadas metidas de golpe), cualquier CSV
+  // de más de este número de filas subido por alguien SIN el PIN de admin ya no se importa
+  // directamente — queda pendiente de que el administrador la revise y apruebe (o la descarte)
+  // desde la pestaña Admin. El propio admin no tiene este límite: sería absurdo que tuviera que
+  // aprobarse a sí mismo. Ver requestBulkImportApproval() y la tarjeta "Cargas masivas
+  // pendientes de aprobación" en el HTML.
+  var CSV_IMPORT_CAP = 300;
 
-    statusEl.textContent = 'Importando ' + parsed.length + ' rondas…';
-
+  // Núcleo de la importación (resolver campos/barras + descartar duplicados + insertar en
+  // tandas): lo usan tanto una importación normal (por debajo del límite, o hecha por el admin)
+  // como la aprobación de una carga masiva ya guardada como pendiente. `statusEl` es opcional
+  // (null cuando no hay un elemento de estado en pantalla al que ir actualizando, como al
+  // aprobar una pendiente desde la tabla de Admin).
+  async function performCsvImport(pid, parsed, statusEl){
     // --- Paso 1: resolver cada fila contra los campos/barras ya existentes, para no duplicar. ---
     var knownTees = tees().map(function(t){ return {course:t.course, color:t.color, cr:t.cr, sr:t.sr, par:t.par}; });
     function findKnownTee(course, cr, sr, par){
@@ -2821,37 +2846,138 @@
       var slice = roundsToInsert.slice(i, i+CHUNK);
       var ids = await StoreOps.batchAddRounds(slice);
       slice.forEach(function(r, idx){ insertedWithIds.push(Object.assign({id: ids[idx]}, r)); });
-      statusEl.textContent = 'Importando ' + Math.min(i+CHUNK, roundsToInsert.length) + '/' + roundsToInsert.length + '…';
+      if(statusEl) statusEl.textContent = 'Importando ' + Math.min(i+CHUNK, roundsToInsert.length) + '/' + roundsToInsert.length + '…';
     }
     // Clima de cada ronda importada: se encola en segundo plano (ver queueWeatherFor), no
     // retrasa el resto de la importación ni el resumen que se muestra a continuación.
     insertedWithIds.forEach(function(r){ queueWeatherFor(r.id, r.course, r.date); });
 
+    return { insertedWithIds: insertedWithIds, linkedCourses: linkedCourses, newTeesToCreate: newTeesToCreate, dupSkipped: dupSkipped, status: status };
+  }
+
+  // Construye el mismo texto de resumen de siempre a partir del resultado de performCsvImport()
+  // — usado tanto por la importación directa como por la aprobación de una carga pendiente.
+  function buildCsvImportSummary(pid, result, opts){
+    opts = opts || {};
     var importedForName = (function(){ var p = players().find(function(x){ return x.id===pid; }); return p?p.name:'—'; })();
-    var summary = roundsToInsert.length + ' rondas importadas' + (adminUnlocked ? ' para ' + importedForName : '') + (status==='pendiente' ? ' (pendientes de aprobación en la pestaña Admin).' : '.');
-    var linkedNames = Object.keys(linkedCourses);
+    var summary = result.insertedWithIds.length + ' rondas importadas' + (opts.forOther ? ' para ' + importedForName : '') + (result.status==='pendiente' ? ' (pendientes de aprobación en la pestaña Admin).' : '.');
+    var linkedNames = Object.keys(result.linkedCourses);
     if(linkedNames.length){
       summary += ' ' + linkedNames.length + ' campo(s) del CSV vinculado(s) a campos ya existentes (' +
-        linkedNames.map(function(k){ return k+'→'+linkedCourses[k]; }).join(', ') + ').';
+        linkedNames.map(function(k){ return k+'→'+result.linkedCourses[k]; }).join(', ') + ').';
     }
-    if(newTeesToCreate.length){
-      summary += ' ' + newTeesToCreate.length + ' barra(s) nueva(s) creada(s) como "Amarillas" (edítalas en la pestaña Campos si conoces el color real).';
+    if(result.newTeesToCreate.length){
+      summary += ' ' + result.newTeesToCreate.length + ' barra(s) nueva(s) creada(s) como "Amarillas" (edítalas en la pestaña Campos si conoces el color real).';
     }
-    if(dupSkipped){
-      summary += ' ' + dupSkipped + ' fila(s) no importada(s) por ser posibles duplicados (mismo jugador+campo+fecha+score ya existente).';
+    if(result.dupSkipped){
+      summary += ' ' + result.dupSkipped + ' fila(s) no importada(s) por ser posibles duplicados (mismo jugador+campo+fecha+score ya existente).';
     }
-    var suspicious = insertedWithIds.filter(isSuspiciousRound);
+    var suspicious = result.insertedWithIds.filter(isSuspiciousRound);
     if(suspicious.length){
       summary += ' ⚠ ' + suspicious.length + ' ronda(s) con un diferencial muy fuera de lo normal — revísalas abajo.';
     }
+    return { text: summary, suspicious: suspicious, importedForName: importedForName };
+  }
+
+  // Guarda el CSV tal cual (texto bruto, para poder re-analizarlo igual en el momento de
+  // aprobarlo) como una solicitud pendiente, en vez de importarlo — ver CSV_IMPORT_CAP arriba.
+  function requestBulkImportApproval(pid, csvText, rowCount){
+    var requester = players().find(function(p){ return p.id===pid; });
+    var entry = {
+      requestedBy: pid,
+      requestedByName: requester ? requester.name : '—',
+      csvText: csvText,
+      rowCount: rowCount,
+      requestedAt: new Date().toISOString(),
+      status: 'pendiente'
+    };
+    return StoreOps.addPendingImport(entry).then(function(){
+      var statusEl = $('#importStatus');
+      var msg = 'Este CSV tiene ' + rowCount + ' filas — de más de ' + CSV_IMPORT_CAP + ', así que por seguridad no se importa solo. ' +
+        'Se ha guardado tu petición para que el administrador la revise. Avísale para que entre en la pestaña Admin y la apruebe.';
+      statusEl.innerHTML = '<span class="pill warning" style="display:inline-block;white-space:normal;">' + esc(msg) + '</span>';
+      $('#importCsv').value = '';
+      render();
+    });
+  }
+
+  async function importCsvRows(){
+    var text = $('#importCsv').value;
+    var parsed = parseHandicapTrackerCsv(text);
+    var statusEl = $('#importStatus');
+    // Por defecto cada usuario solo puede importar rondas para sí mismo. Excepción: en modo
+    // admin se puede elegir el jugador destino (útil para pruebas con datos de varios usuarios reales).
+    var pid = (adminUnlocked && $('#importAsPlayer').value) ? $('#importAsPlayer').value : myId();
+    if(!pid || !players().some(function(p){ return p.id===pid; })){ openOnboard(); return; }
+    if(parsed.length===0){ statusEl.textContent = 'No se ha reconocido ninguna fila válida en ese texto.'; return; }
+
+    if(!adminUnlocked && parsed.length > CSV_IMPORT_CAP){
+      await requestBulkImportApproval(pid, text, parsed.length);
+      return;
+    }
+
+    statusEl.textContent = 'Importando ' + parsed.length + ' rondas…';
+    var result = await performCsvImport(pid, parsed, statusEl);
+    var built = buildCsvImportSummary(pid, result, { forOther: adminUnlocked });
     // Mensaje claro y visible del resultado (pedido el 14/9/2026): verde si se ha importado
     // algo, ámbar si no se ha importado nada (todo eran duplicados) — mismo criterio visual que
     // el resto de avisos de la app ("pill good"/"pill warning").
-    var summaryCls = roundsToInsert.length>0 ? 'good' : 'warning';
-    statusEl.innerHTML = '<span class="pill ' + summaryCls + '" style="display:inline-block;white-space:normal;">' + esc(summary) + '</span>';
+    var summaryCls = result.insertedWithIds.length>0 ? 'good' : 'warning';
+    statusEl.innerHTML = '<span class="pill ' + summaryCls + '" style="display:inline-block;white-space:normal;">' + esc(built.text) + '</span>';
     $('#importCsv').value = '';
-    renderImportSuspiciousReview(suspicious, importedForName);
+    renderImportSuspiciousReview(built.suspicious, built.importedForName);
     render();
+  }
+
+  // ---------- Cargas masivas pendientes de aprobación (Admin) ----------
+  function renderPendingImports(){
+    var summary = $('#pendingImportsSummary');
+    var table = $('#pendingImportsTable');
+    if(!summary || !table) return;
+    var tbody = table.querySelector('tbody');
+    var list = (Store.pendingImports||[]).slice().sort(function(a,b){ return a.requestedAt < b.requestedAt ? -1 : 1; });
+    if(list.length===0){
+      summary.innerHTML = '<p class="hint">No hay ninguna carga masiva pendiente de aprobación ahora mismo.</p>';
+      tbody.innerHTML = '<tr><td colspan="4" class="empty">Nada pendiente.</td></tr>';
+      return;
+    }
+    summary.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">' + list.length +
+      ' carga(s) masiva(s) esperando revisión — más de ' + CSV_IMPORT_CAP + ' filas de golpe, por eso no se metieron solas.</p>';
+    tbody.innerHTML = list.map(function(p){
+      var when = new Date(p.requestedAt);
+      var whenStr = isNaN(when.getTime()) ? '—' : when.toLocaleString('es-ES');
+      return '<tr data-pending-row="'+esc(p.id)+'">' +
+        '<td>'+esc(p.requestedByName)+'</td>' +
+        '<td class="num">'+esc(p.rowCount)+'</td>' +
+        '<td>'+esc(whenStr)+'</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<button type="button" class="btn small primary" data-import-approve="'+esc(p.id)+'">Importar</button> ' +
+          '<button type="button" class="btn small danger" data-import-discard="'+esc(p.id)+'">Descartar</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+    $all('[data-import-approve]', tbody).forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-import-approve');
+        var req = list.find(function(x){ return x.id===id; });
+        if(!req){ render(); return; }
+        btn.disabled = true;
+        var parsed = parseHandicapTrackerCsv(req.csvText);
+        performCsvImport(req.requestedBy, parsed, null).then(function(result){
+          var built = buildCsvImportSummary(req.requestedBy, result, { forOther: true });
+          return StoreOps.deletePendingImport(id).then(function(){
+            renderImportSuspiciousReview(built.suspicious, built.importedForName);
+            render();
+          });
+        });
+      });
+    });
+    $all('[data-import-discard]', tbody).forEach(function(btn){
+      bindConfirmDelete(btn, function(){
+        var id = btn.getAttribute('data-import-discard');
+        StoreOps.deletePendingImport(id).then(render);
+      }, { timeoutMs: 3000, label: 'Descartar' });
+    });
   }
 
   // ---------- Revisión de rondas sospechosas tras importar CSV ----------
@@ -4011,6 +4137,7 @@
       });
     });
 
+    renderPendingImports();
     renderSuspiciousRounds();
     renderDuplicateRounds();
     renderTrash();
