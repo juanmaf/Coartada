@@ -370,6 +370,11 @@
   </div>
 </div>
 
+<!-- Solo visible si REQUIRE_LOGIN=false (ver el interruptor junto a la inicialización de Firebase
+     Auth): recuerda bien claro que, mientras tanto, cualquiera con el enlace puede leer/escribir
+     sin tener que iniciar sesión — para no olvidarse de reactivarlo en cuanto se pueda. -->
+<div id="loginDisabledBanner" class="banner warn" hidden style="background:var(--critical, #b00020);color:#fff;">⚠️ Modo temporal: el inicio de sesión con Google está desactivado — cualquiera con el enlace puede leer y escribir sin identificarse. Reactívalo en cuanto puedas.</div>
+
 <div class="app-shell">
 
   <header class="topbar">
@@ -1102,6 +1107,15 @@
   // detrás) no cambia nada del "quién eres" que ya elige cada uno más abajo — solo añade una
   // comprobación previa que un script no puede fingir sin más. firestore.rules ahora exige
   // `request.auth != null` en todas las colecciones para poder leer o escribir.
+  // Interruptor único (15/9/2026): si hace falta entrar desde una red/ordenador donde el
+  // proveedor de Google queda bloqueado (visto en el ordenador de trabajo de la FNMT), se pone
+  // esto a `false` para saltarse el inicio de sesión mientras se hace lo que haga falta desde
+  // ahí, y se vuelve a poner a `true` en cuanto se pueda otra vez. OJO: esto va SIEMPRE a la vez
+  // que el mismo cambio en `firestore.rules` (la función `isSignedIn()` ahí) — si solo se cambia
+  // aquí, las escrituras seguirán rechazándose en el servidor; si solo se cambia allí, la app
+  // seguirá pidiendo iniciar sesión sin necesitarlo de verdad. Mientras esté en `false`, la app
+  // muestra un aviso bien visible arriba de todo para no olvidarse de reactivarlo.
+  var REQUIRE_LOGIN = false; // TEMPORAL — 15/9/2026, ver el comentario de arriba. Volver a `true` en cuanto se pueda.
   var auth = getAuth(app);
   var googleProvider = new GoogleAuthProvider();
   var authUser = null;
@@ -1156,7 +1170,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.31";
+  var APP_VERSION = "2026-08-28.33";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], pendingImports: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1234,6 +1248,16 @@
     var b = document.getElementById('syncBanner');
     b.hidden = false;
     b.textContent = 'No se puede conectar con la base de datos (' + (err && err.code || 'error') + '). Revisa firebase-config.js y las reglas de Firestore — ver SETUP.md.';
+  }
+
+  // Aviso puntual (no un estado permanente como el de conexión): se usa cuando un borrado no se
+  // ha podido confirmar de verdad (ver deleteRoundWithLogVerified) — se oculta solo a los pocos
+  // segundos, salvo que de verdad se esté sin conexión (entonces manda el aviso de "offline").
+  function showDeleteWarn(msg){
+    var b = document.getElementById('syncBanner');
+    b.hidden = false;
+    b.textContent = msg;
+    setTimeout(function(){ if(navigator.onLine) b.hidden = true; }, 8000);
   }
 
   async function seedInitialData(){
@@ -1712,6 +1736,47 @@
     return StoreOps.logDeletedRound(entry).then(function(){ return StoreOps.deleteRound(round.id); });
   }
 
+  // Comprueba que una ronda ha desaparecido DE VERDAD de los datos ya sincronizados
+  // (Store.rounds, alimentado por el propio listener en tiempo real de Firestore) en vez de
+  // fiarse solo de que la promesa de deleteDoc se resuelva. Visto el 15/9/2026: incluso tras la
+  // v.31 (borrado en tandas, con aviso de fallos), un segundo intento seguía sin arreglar rondas
+  // que "parecía" que se borraban pero que un día después seguían ahí — es decir, la promesa se
+  // resolvía (probablemente por una condición de red — proxy, conexión intermitente — que la
+  // aplica de forma optimista en local) sin que el borrado llegara nunca a confirmarse de verdad
+  // en el servidor. Esta comprobación adicional no se fía de la promesa: espera a que el propio
+  // listener en tiempo real dé fe de que la ronda ya no está, con un plazo máximo razonable.
+  function waitUntilRoundGone(roundId, timeoutMs){
+    return new Promise(function(resolve){
+      var deadline = Date.now() + timeoutMs;
+      (function check(){
+        var stillThere = Store.rounds.some(function(r){ return r.id === roundId; });
+        if(!stillThere){ resolve(true); return; }
+        if(Date.now() > deadline){ resolve(false); return; }
+        setTimeout(check, 250);
+      })();
+    });
+  }
+
+  // Borra una ronda y no la da por buena hasta que waitUntilRoundGone lo confirme. Si no se
+  // confirma a tiempo, añade una pista concreta y accionable (sesión no detectada, sin conexión)
+  // en vez de un simple "ha fallado" — para poder afinar la causa real en vez de tener que
+  // adivinarla desde fuera.
+  function deleteRoundWithLogVerified(round, reason, verifyTimeoutMs){
+    return deleteRoundWithLog(round, reason).then(function(){
+      return waitUntilRoundGone(round.id, verifyTimeoutMs).then(function(gone){
+        if(!gone){
+          var diag = [];
+          if(!authUser) diag.push('sesión no detectada');
+          if(typeof navigator !== 'undefined' && navigator.onLine === false) diag.push('sin conexión');
+          throw Object.assign(
+            new Error('no se ha podido confirmar el borrado' + (diag.length ? (' (' + diag.join(', ') + ')') : ' a tiempo')),
+            { code: 'unconfirmed' }
+          );
+        }
+      });
+    });
+  }
+
   // Borra muchas rondas de golpe (p.ej. "Borrar las marcadas" en la Auditoría de duplicados)
   // SIN lanzar miles de peticiones a la vez: eso fue justo lo que se atascó el 15/9/2026 en un
   // móvil ("se queda la pantalla en blanco"), y además — visto ese mismo día — cuando alguna
@@ -1731,7 +1796,7 @@
       if(i >= list.length){ onDone(ok, fail, failMsgs); return; }
       var chunk = list.slice(i, i + CHUNK);
       i += CHUNK;
-      Promise.allSettled(chunk.map(function(r){ return deleteRoundWithLog(r, reason); })).then(function(results){
+      Promise.allSettled(chunk.map(function(r){ return deleteRoundWithLogVerified(r, reason, 6000); })).then(function(results){
         results.forEach(function(res){
           if(res.status === 'fulfilled'){ ok++; }
           else {
@@ -1896,15 +1961,18 @@
   // Firebase Auth, más arriba, donde `$` todavía no existía) ----------
   function renderAuthGate(){
     $('#authLoading').hidden = true;
-    $('#authGate').hidden = !!authUser;
+    $('#authGate').hidden = !REQUIRE_LOGIN || !!authUser;
+    var b = $('#loginDisabledBanner');
+    if(b) b.hidden = REQUIRE_LOGIN;
   }
   onAuthStateChanged(auth, function(user){
     authUser = user;
     renderAuthGate();
     // Solo se empieza a escuchar Firestore una vez hay sesión de verdad — ver el porqué junto a
     // startListening(), más arriba (si no, un "permission-denied" por no tener sesión aún deja
-    // el listener cerrado para siempre, y luego iniciar sesión no lo arreglaría solo).
-    if(user) startListening();
+    // el listener cerrado para siempre, y luego iniciar sesión no lo arreglaría solo). Con
+    // REQUIRE_LOGIN=false se escucha igualmente aunque no haya sesión (ver el interruptor arriba).
+    if(user || !REQUIRE_LOGIN) startListening();
   });
   $('#googleSignInBtn').addEventListener('click', function(){
     var errEl = $('#authGateError');
@@ -3066,8 +3134,11 @@
       bindConfirmDelete(btn, function(){
         var r = list.find(function(x){ return x.id===id; });
         if(!r) return;
-        deleteRoundWithLog(r, 'borrada al revisar aviso de ronda sospechosa').then(function(){
+        deleteRoundWithLogVerified(r, 'borrada al revisar aviso de ronda sospechosa', 6000).then(function(){
           removeRow(id);
+          render();
+        }).catch(function(err){
+          showDeleteWarn('Esta ronda no se ha podido borrar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
           render();
         });
       }, { timeoutMs: 3000 });
@@ -3244,7 +3315,10 @@
       bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === rid; });
         if(!round){ render(); return; }
-        deleteRoundWithLog(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador').then(render);
+        deleteRoundWithLogVerified(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador', 6000).then(render).catch(function(err){
+          showDeleteWarn('Esta ronda no se ha podido borrar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
+          render();
+        });
       });
     });
   }
@@ -4153,7 +4227,10 @@
           var rid = btn.getAttribute('data-reject');
           var round = rounds().find(function(x){ return x.id === rid; });
           if(!round){ render(); return; }
-          deleteRoundWithLog(round, 'rechazada por admin').then(render);
+          deleteRoundWithLogVerified(round, 'rechazada por admin', 6000).then(render).catch(function(err){
+            showDeleteWarn('Esta ronda no se ha podido rechazar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
+            render();
+          });
         });
       });
     }
@@ -4244,7 +4321,13 @@
       actions.innerHTML = '';
       return;
     }
-    summary.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">' + totalInGroups + ' ronda(s) comparten jugador+campo+fecha en ' + groups.length + ' grupo(s) (de un total de ' + rounds().length + ' rondas) — de esas, ' + totalExactExtra + ' son copias EXACTAS de más (mismo modo y resultado) y ya salen premarcadas abajo. El resto del grupo solo coincide en la fecha: revísalas antes de tocarlas, pueden ser rondas reales distintas.</p>';
+    // Pista de diagnóstico siempre visible aquí (pedido tras el 15/9/2026: los borrados en lote
+    // parecían fallar sin explicación) — para poder ver de un vistazo, en el momento de borrar,
+    // si hay sesión real y si hay conexión, sin tener que reproducir el problema a ciegas.
+    var diagOnline = (typeof navigator !== 'undefined' && navigator.onLine === false) ? 'SIN conexión' : 'con conexión';
+    var diagAuth = authUser ? ('sesión: ' + esc(authUser.email || authUser.uid)) : 'SIN sesión detectada';
+    summary.innerHTML = '<p class="hint" style="margin-bottom:6px;">Estado ahora mismo: ' + diagOnline + ' · ' + diagAuth + '.</p>' +
+      '<p class="pill warning" style="display:block;padding:10px 12px;">' + totalInGroups + ' ronda(s) comparten jugador+campo+fecha en ' + groups.length + ' grupo(s) (de un total de ' + rounds().length + ' rondas) — de esas, ' + totalExactExtra + ' son copias EXACTAS de más (mismo modo y resultado) y ya salen premarcadas abajo. El resto del grupo solo coincide en la fecha: revísalas antes de tocarlas, pueden ser rondas reales distintas.</p>';
     var rowsHtml = '';
     groups.forEach(function(g){
       rowsHtml += '<tr class="dup-group-head"><td colspan="9" style="background:rgba(255,255,255,.04);"><strong>'+esc(pname(g[0].player))+'</strong> · '+esc(g[0].course)+' · '+esc(g[0].date)+' — '+g.length+' rondas</td></tr>';
@@ -4275,7 +4358,11 @@
       bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === rid; });
         if(!round){ render(); return; }
-        deleteRoundWithLog(round, 'duplicado (auditoría)').then(render);
+        deleteRoundWithLogVerified(round, 'duplicado (auditoría)', 6000).then(render).catch(function(err){
+          var statusEl = $('#dupBulkStatus');
+          if(statusEl) statusEl.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">Esta ronda no se ha podido borrar de forma confirmada (' + esc((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.</p>';
+          render();
+        });
       }, { timeoutMs: 3000 });
     });
 
@@ -4332,7 +4419,10 @@
       bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === id; });
         if(!round){ render(); return; }
-        deleteRoundWithLog(round, 'borrada desde el indicador de rondas sospechosas').then(render);
+        deleteRoundWithLogVerified(round, 'borrada desde el indicador de rondas sospechosas', 6000).then(render).catch(function(err){
+          showDeleteWarn('Esta ronda no se ha podido borrar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
+          render();
+        });
       }, { timeoutMs: 3000 });
     });
     $all('[data-susp-editcourse]', tbody).forEach(function(btn){
