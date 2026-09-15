@@ -1170,7 +1170,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.34";
+  var APP_VERSION = "2026-08-28.35";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], pendingImports: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1179,6 +1179,7 @@
   function allReady(){ return ready.players && ready.teams && ready.tees && ready.rounds && ready.config; }
   var seeded = false;
   function maybeSeedThenFire(){
+    hideConnError();
     if(!seeded && allReady() && Store.players.length===0 && Store.tees.length===0 && Store.rounds.length===0){
       seeded = true;
       seedInitialData().then(function(){ if(onStoreChange) onStoreChange(); });
@@ -1221,6 +1222,7 @@
     // parte de la comprobación de "base de datos vacía" ni bloquea el primer render.
     onSnapshot(collection(db,'deletedRounds'), function(snap){
       Store.deletedRounds = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      hideConnError();
       if(onStoreChange) onStoreChange();
     }, function(err){ showConnError(err); });
     // Caché compartida de geocodificación por campo (para el clima del día jugado, ver más
@@ -1228,18 +1230,21 @@
     // pura ayuda de rendimiento (evita pedir la misma geocodificación desde cada dispositivo).
     onSnapshot(collection(db,'courseGeo'), function(snap){
       Store.courseGeo = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      hideConnError();
     }, function(err){ showConnError(err); });
     // Preparación de la Ryder Pucela Cup (pestaña "Ryder", solo visible con el PIN de admin):
     // un único documento con la config del evento en curso — no forma parte del arranque de
     // la app ni de la comprobación de "base de datos vacía", como deletedRounds/courseGeo.
     onSnapshot(doc(db,'ryder','main'), function(d){
       Store.ryder = d.exists() ? d.data() : null;
+      hideConnError();
       if(onStoreChange) onStoreChange();
     }, function(err){ showConnError(err); });
     // Cargas masivas de CSV pendientes de aprobación del admin (14/9/2026, ver
     // requestBulkImportApproval() más abajo) — tampoco bloquea el arranque de la app.
     onSnapshot(collection(db,'pendingImports'), function(snap){
       Store.pendingImports = snap.docs.map(function(d){ return Object.assign({id:d.id}, d.data()); });
+      hideConnError();
       if(onStoreChange) onStoreChange();
     }, function(err){ showConnError(err); });
   }
@@ -1258,6 +1263,15 @@
     b.hidden = false;
     b.textContent = msg;
     setTimeout(function(){ if(navigator.onLine) b.hidden = true; }, 8000);
+  }
+
+  // Se llama en cuanto CUALQUIER listener recibe datos de verdad — así, si el aviso de "No se
+  // puede conectar" se quedó encendido por un error pasajero (p.ej. justo tras cerrar sesión con
+  // "salir"), desaparece solo en cuanto la conexión vuelve a funcionar, en vez de quedarse ahí
+  // para siempre aunque todo se haya arreglado.
+  function hideConnError(){
+    var b = document.getElementById('syncBanner');
+    if(b) b.hidden = true;
   }
 
   async function seedInitialData(){
@@ -1978,6 +1992,19 @@
     // el listener cerrado para siempre, y luego iniciar sesión no lo arreglaría solo). Con
     // REQUIRE_LOGIN=false se escucha igualmente aunque no haya sesión (ver el interruptor arriba).
     if(user || !REQUIRE_LOGIN) startListening();
+    else if(REQUIRE_LOGIN && listeningStarted){
+      // Se ha cerrado sesión (botón "salir") teniendo antes una sesión real: los listeners que
+      // ya estaban enganchados quedan muertos para siempre en cuanto Firestore les responde con
+      // permission-denied (mismo motivo que arriba), así que sin este reseteo, volver a iniciar
+      // sesión después NO los reactivaría — la app se quedaría colgada con el aviso de "No se
+      // puede conectar" aunque el login se hiciera bien. Al dejar `listeningStarted` en `false`,
+      // el próximo `startListening()` (cuando vuelva a haber sesión) los vuelve a enganchar de
+      // cero. El aviso de conexión también se oculta aquí: es esperable mientras no hay sesión,
+      // no un fallo real que haya que seguir mostrando.
+      listeningStarted = false;
+      var banner = $('#syncBanner');
+      if(banner) banner.hidden = true;
+    }
   });
   $('#googleSignInBtn').addEventListener('click', function(){
     var errEl = $('#authGateError');
