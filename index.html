@@ -861,6 +861,7 @@
               <tbody></tbody>
             </table></div>
             <div id="dupRoundsActions" style="margin-top:10px;"></div>
+            <div id="dupBulkStatus" style="margin-top:10px;"></div>
           </div>
 
           <div class="row">
@@ -1155,7 +1156,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.30";
+  var APP_VERSION = "2026-08-28.31";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], pendingImports: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1709,6 +1710,41 @@
       reason: reason || 'manual'
     };
     return StoreOps.logDeletedRound(entry).then(function(){ return StoreOps.deleteRound(round.id); });
+  }
+
+  // Borra muchas rondas de golpe (p.ej. "Borrar las marcadas" en la Auditoría de duplicados)
+  // SIN lanzar miles de peticiones a la vez: eso fue justo lo que se atascó el 15/9/2026 en un
+  // móvil ("se queda la pantalla en blanco"), y además — visto ese mismo día — cuando alguna
+  // petición fallaba de verdad (por ejemplo, cuota de Firestore agotada o un corte de conexión)
+  // no se avisaba de nada: la ronda parecía borrarse al momento (el navegador la quita de la
+  // vista antes de tener la confirmación del servidor) pero el borrado nunca llegaba a
+  // completarse, así que en cuanto la app se reconectaba la ronda "volvía a aparecer" y el
+  // hándicap seguía igual, sin ningún mensaje de error visible.
+  //
+  // Aquí se borra en tandas pequeñas con una pausa entre cada una, y se cuenta explícitamente
+  // cuántas han fallado y por qué, para que quede claro en vez de quedar en el aire.
+  function bulkDeleteRoundsWithLog(list, reason, onProgress, onDone){
+    var CHUNK = 15, DELAY_MS = 300;
+    var ok = 0, fail = 0, failMsgs = [];
+    var i = 0;
+    function next(){
+      if(i >= list.length){ onDone(ok, fail, failMsgs); return; }
+      var chunk = list.slice(i, i + CHUNK);
+      i += CHUNK;
+      Promise.allSettled(chunk.map(function(r){ return deleteRoundWithLog(r, reason); })).then(function(results){
+        results.forEach(function(res){
+          if(res.status === 'fulfilled'){ ok++; }
+          else {
+            fail++;
+            var msg = (res.reason && (res.reason.code || res.reason.message)) || String(res.reason);
+            if(failMsgs.indexOf(msg) === -1) failMsgs.push(msg);
+          }
+        });
+        onProgress(ok, fail, list.length);
+        setTimeout(next, DELAY_MS);
+      });
+    }
+    next();
   }
 
   function cmpDateAsc(a,b){ return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); }
@@ -4244,10 +4280,24 @@
     });
 
     actions.innerHTML = '<button type="button" class="btn danger" id="dupDeleteSelectedBtn">Borrar las marcadas</button> <span class="hint">Por defecto solo se marcan las "copia idéntica" (mismo modo y resultado repetido) — revisa igualmente antes de confirmar.</span>';
+    var statusEl = $('#dupBulkStatus');
     bindConfirmDelete($('#dupDeleteSelectedBtn'), function(){
       var ids = $all('.dup-check', tbody).filter(function(cb){ return cb.checked; }).map(function(cb){ return cb.getAttribute('data-dup-id'); });
       var toDelete = ids.map(function(id){ return rounds().find(function(x){ return x.id===id; }); }).filter(Boolean);
-      Promise.all(toDelete.map(function(r){ return deleteRoundWithLog(r, 'duplicado (auditoría, borrado en lote)'); })).then(render);
+      if(toDelete.length === 0){ return; }
+      if(statusEl) statusEl.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">Borrando 0 / ' + toDelete.length + '…</p>';
+      bulkDeleteRoundsWithLog(toDelete, 'duplicado (auditoría, borrado en lote)', function(ok, fail, total){
+        if(statusEl) statusEl.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">Borrando… ' + (ok+fail) + ' / ' + total + (fail ? (' (' + fail + ' fallidas de momento)') : '') + '</p>';
+      }, function(ok, fail, failMsgs){
+        if(statusEl){
+          if(fail === 0){
+            statusEl.innerHTML = '<p class="pill good" style="display:block;padding:10px 12px;">' + ok + ' ronda(s) borrada(s) correctamente.</p>';
+          } else {
+            statusEl.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">' + ok + ' ronda(s) borrada(s), pero ' + fail + ' NO se han podido borrar (' + esc(failMsgs.join(', ')) + '). Puede ser un corte de conexión o un límite de Firestore — espera un momento y vuelve a intentarlo con "Borrar las marcadas"; las que ya se borraron no se volverán a tocar.</p>';
+          }
+        }
+        render();
+      });
     }, { timeoutMs: 4000, label: 'Borrar las marcadas' });
   }
 
