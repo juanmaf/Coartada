@@ -1170,7 +1170,7 @@
   // 25/8/2026 (varias rondas de Entrepinos mal calculadas — ver decisiones del proyecto).
   // Este valor se sube a mano cada vez que se publica un cambio en index.html; el chequeo
   // de versión de más abajo lo compara contra el index.html que hay realmente publicado.
-  var APP_VERSION = "2026-08-28.33";
+  var APP_VERSION = "2026-08-28.34";
 
   // ---------- Store: caché en memoria, alimentada en tiempo real desde Firestore ----------
   var Store = { players: [], teams: [], tees: [], rounds: [], deletedRounds: [], courseGeo: [], pendingImports: [], ryder: null, config: { pin: '2026', autoApprove: false } };
@@ -1786,17 +1786,22 @@
   // completarse, así que en cuanto la app se reconectaba la ronda "volvía a aparecer" y el
   // hándicap seguía igual, sin ningún mensaje de error visible.
   //
-  // Aquí se borra en tandas pequeñas con una pausa entre cada una, y se cuenta explícitamente
-  // cuántas han fallado y por qué, para que quede claro en vez de quedar en el aire.
+  // Aquí se borra en tandas con una pausa entre cada una, y se cuenta explícitamente cuántas han
+  // fallado y por qué, para que quede claro en vez de quedar en el aire. Tamaño de tanda subido
+  // el 15/9/2026 (de 15 a 60): con miles de rondas de golpe desde un ordenador de verdad (no un
+  // móvil, que es lo que motivó tandas pequeñas en un principio), 15 en 15 iba a tardar casi un
+  // día entero — con 60 en paralelo y algo más de margen para confirmar cada una (una red con
+  // más latencia tarda más en confirmar, no por eso el borrado está fallando de verdad) debería
+  // ir bastante más rápido sin perder el aviso claro de qué ha fallado y qué no.
   function bulkDeleteRoundsWithLog(list, reason, onProgress, onDone){
-    var CHUNK = 15, DELAY_MS = 300;
+    var CHUNK = 60, DELAY_MS = 150, VERIFY_TIMEOUT_MS = 9000;
     var ok = 0, fail = 0, failMsgs = [];
     var i = 0;
     function next(){
       if(i >= list.length){ onDone(ok, fail, failMsgs); return; }
       var chunk = list.slice(i, i + CHUNK);
       i += CHUNK;
-      Promise.allSettled(chunk.map(function(r){ return deleteRoundWithLogVerified(r, reason, 6000); })).then(function(results){
+      Promise.allSettled(chunk.map(function(r){ return deleteRoundWithLogVerified(r, reason, VERIFY_TIMEOUT_MS); })).then(function(results){
         results.forEach(function(res){
           if(res.status === 'fulfilled'){ ok++; }
           else {
@@ -3134,7 +3139,7 @@
       bindConfirmDelete(btn, function(){
         var r = list.find(function(x){ return x.id===id; });
         if(!r) return;
-        deleteRoundWithLogVerified(r, 'borrada al revisar aviso de ronda sospechosa', 6000).then(function(){
+        deleteRoundWithLogVerified(r, 'borrada al revisar aviso de ronda sospechosa', 9000).then(function(){
           removeRow(id);
           render();
         }).catch(function(err){
@@ -3315,7 +3320,7 @@
       bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === rid; });
         if(!round){ render(); return; }
-        deleteRoundWithLogVerified(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador', 6000).then(render).catch(function(err){
+        deleteRoundWithLogVerified(round, (round.player !== id) ? 'borrada por admin' : 'borrada por el propio jugador', 9000).then(render).catch(function(err){
           showDeleteWarn('Esta ronda no se ha podido borrar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
           render();
         });
@@ -4227,7 +4232,7 @@
           var rid = btn.getAttribute('data-reject');
           var round = rounds().find(function(x){ return x.id === rid; });
           if(!round){ render(); return; }
-          deleteRoundWithLogVerified(round, 'rechazada por admin', 6000).then(render).catch(function(err){
+          deleteRoundWithLogVerified(round, 'rechazada por admin', 9000).then(render).catch(function(err){
             showDeleteWarn('Esta ronda no se ha podido rechazar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
             render();
           });
@@ -4358,7 +4363,7 @@
       bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === rid; });
         if(!round){ render(); return; }
-        deleteRoundWithLogVerified(round, 'duplicado (auditoría)', 6000).then(render).catch(function(err){
+        deleteRoundWithLogVerified(round, 'duplicado (auditoría)', 9000).then(render).catch(function(err){
           var statusEl = $('#dupBulkStatus');
           if(statusEl) statusEl.innerHTML = '<p class="pill warning" style="display:block;padding:10px 12px;">Esta ronda no se ha podido borrar de forma confirmada (' + esc((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.</p>';
           render();
@@ -4419,7 +4424,7 @@
       bindConfirmDelete(btn, function(){
         var round = rounds().find(function(x){ return x.id === id; });
         if(!round){ render(); return; }
-        deleteRoundWithLogVerified(round, 'borrada desde el indicador de rondas sospechosas', 6000).then(render).catch(function(err){
+        deleteRoundWithLogVerified(round, 'borrada desde el indicador de rondas sospechosas', 9000).then(render).catch(function(err){
           showDeleteWarn('Esta ronda no se ha podido borrar de forma confirmada (' + ((err && (err.code || err.message)) || String(err)) + '). Vuelve a intentarlo.');
           render();
         });
