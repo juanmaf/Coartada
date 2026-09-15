@@ -1115,7 +1115,7 @@
   // aquí, las escrituras seguirán rechazándose en el servidor; si solo se cambia allí, la app
   // seguirá pidiendo iniciar sesión sin necesitarlo de verdad. Mientras esté en `false`, la app
   // muestra un aviso bien visible arriba de todo para no olvidarse de reactivarlo.
-  var REQUIRE_LOGIN = false; // TEMPORAL — 15/9/2026, ver el comentario de arriba. Volver a `true` en cuanto se pueda.
+  var REQUIRE_LOGIN = true;
   var auth = getAuth(app);
   var googleProvider = new GoogleAuthProvider();
   var authUser = null;
